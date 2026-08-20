@@ -176,6 +176,49 @@ against password guessing rather than a defence — a serverless deployment runs
 many instances, each with its own counter. Put a shared limiter in front of
 anything public.
 
+## Cost tracking and monthly limits
+
+Every turn is priced when it finishes and stored with the run, so a past turn
+keeps the cost it was actually billed at even after prices change.
+
+```
+GET   /api/usage              your spend this month, broken down by agent
+GET   /api/usage?scope=all    every user's spend            (admin)
+PATCH /api/usage/limit        set one user's cap            (admin)
+```
+
+The header carries a meter: `$3.41 / $20.00`.
+
+**Cached tokens are priced separately.** An agent loop re-sends its history on
+every step, so on a long turn most input tokens are cache reads — billed at
+about a tenth of the input rate, with cache writes at 1.25x. Charging
+everything at the full input rate would overstate cost several times over, so
+`agent_runs` records the cache split and prices it accordingly.
+
+**Costs are integer nano-dollars**, not floats, so summing a month of runs
+involves no drift. `formatUsd` handles display.
+
+**Prices live in `src/billing/pricing.ts`.** There is no pricing API to read at
+runtime, so it is a local table — review it when you change `ANTHROPIC_MODEL`.
+An unknown model is billed at the *highest* known rate, not zero: this is a
+spending limit, so the failure mode leans towards over-charging with a loud
+warning rather than letting an unrecognised model run past the cap unnoticed.
+
+### What the limit does and does not do
+
+The check runs **before** a turn starts, because a turn's cost is only known
+once it finishes. A turn that begins just under the cap can therefore end over
+it. The limit bounds how far spending drifts past, it does not make overshoot
+impossible — lower `maxSteps` on an agent to tighten the worst case.
+
+Over the limit, `/api/chat` returns **402** with `budget_exceeded`. It resets
+at 00:00 UTC on the 1st. `DEFAULT_MONTHLY_LIMIT_USD` applies to anyone without
+an override; `0` disables refusal while still recording spend.
+
+Embedding costs (Voyage or OpenAI) are **not** counted — only model turns are.
+Ingestion is admin-only and one-off, so it does not accumulate per user, but it
+is a real cost that this does not see.
+
 ## Retrieval (RAG)
 
 Documents are chunked, embedded and stored in Postgres with pgvector. The
@@ -317,6 +360,9 @@ src/
 │   ├── memory-chat-repository.ts
 │   └── index.ts                 adapter selection (the only place it happens)
 ├── db/                          schema, pooled client, migration runner
+├── billing/
+│   ├── pricing.ts               price table and per-turn cost in nano-dollars
+│   └── usage.ts                 monthly spend, limits, enforcement
 ├── storage/
 │   ├── s3.ts                    presigning, and reading an object back
 │   └── resolve-attachments.ts   swaps stored refs for signed URLs per turn
@@ -368,7 +414,7 @@ npm run dev
 | --- | --- |
 | `conversations` | One row per thread, including the agent that owns it |
 | `messages` | Role plus a JSONB `parts` array, so tool calls survive a round trip intact |
-| `agent_runs` | Per-turn metrics: agent, model, steps, finish reason, token counts, duration |
+| `agent_runs` | Per-turn metrics: agent, model, steps, finish reason, token counts (incl. cache split), cost, duration |
 | `users` | Accounts: email, scrypt hash, role |
 | `sessions` | Server-side sessions, storing only a hash of each token |
 | `attachments` | Uploaded files: owner, object key, type and size |

@@ -69,6 +69,13 @@ const envSchema = z.object({
    * here rather than promoting in-app means the first person to sign up cannot
    * make themselves one.
    */
+  /**
+   * Monthly spend cap per user, in US dollars, for accounts without their own
+   * override. Set to 0 to disable the limit entirely - spending is still
+   * recorded, it is just never refused.
+   */
+  DEFAULT_MONTHLY_LIMIT_USD: z.coerce.number().min(0).default(20),
+
   ADMIN_EMAILS: z
     .string()
     .optional()

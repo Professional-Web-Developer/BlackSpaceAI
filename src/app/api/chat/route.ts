@@ -7,6 +7,8 @@ import {
 } from "ai";
 
 import { requireUser } from "@/auth/service";
+import { costOfUsage } from "@/billing/pricing";
+import { assertWithinBudget } from "@/billing/usage";
 import { env } from "@/config/env";
 import { getModel, getProviderOptions } from "@/lib/agent";
 import { ConfigurationError, toErrorResponse } from "@/lib/errors";
@@ -29,6 +31,10 @@ export async function POST(request: Request) {
     );
 
     const user = await requireUser();
+
+    // Checked before the turn starts, since a turn's cost is only known once
+    // it finishes. This bounds the overshoot rather than preventing it.
+    await assertWithinBudget(user.id);
 
     if (!env.ANTHROPIC_API_KEY) {
       throw new ConfigurationError(
@@ -88,6 +94,10 @@ export async function POST(request: Request) {
                   result.steps,
                 ]);
 
+                const cacheReadTokens = usage.inputTokenDetails?.cacheReadTokens;
+                const cacheWriteTokens =
+                  usage.inputTokenDetails?.cacheWriteTokens;
+
                 await completeTurn({
                   conversationId: turn.conversation.id,
                   assistantMessage: responseMessage,
@@ -99,6 +109,16 @@ export async function POST(request: Request) {
                     inputTokens: usage.inputTokens,
                     outputTokens: usage.outputTokens,
                     totalTokens: usage.totalTokens,
+                    cacheReadTokens,
+                    cacheWriteTokens,
+                    // Priced now, at today's rates, and stored with the run:
+                    // a past turn keeps the cost it was actually billed at.
+                    costNanos: costOfUsage(agent.model, {
+                      inputTokens: usage.inputTokens,
+                      outputTokens: usage.outputTokens,
+                      cacheReadTokens,
+                      cacheWriteTokens,
+                    }),
                     durationMs: Date.now() - startedAt,
                   },
                 });

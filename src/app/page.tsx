@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 
 import { listAgentSummaries } from "@/agents/registry";
 import { getCurrentUser } from "@/auth/service";
+import { formatUsd } from "@/billing/pricing";
+import { usageForUser } from "@/billing/usage";
 import { Chat } from "@/components/chat";
 import { env, isDatabaseEnabled, isTracingEnabled } from "@/config/env";
 import { isStorageConfigured } from "@/storage/s3";
@@ -15,7 +17,10 @@ export default async function Home() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const conversations = await listConversations(user.id);
+  const [conversations, usage] = await Promise.all([
+    listConversations(user.id),
+    usageForUser(user.id),
+  ]);
   const agents = listAgentSummaries();
 
   return (
@@ -24,6 +29,18 @@ export default async function Home() {
         <div className="header-row">
           <h1>BlackSpace AI</h1>
           <form action="/api/auth/logout" method="post" className="account">
+            <span
+              className={`usage${usage.fraction >= 0.9 ? " over" : ""}`}
+              title={`${formatUsd(usage.spentNanos)} of ${formatUsd(usage.limitNanos)} used this month across ${usage.runs} runs`}
+            >
+              <span
+                className="usage-bar"
+                style={{ width: `${Math.round(usage.fraction * 100)}%` }}
+              />
+              <span className="usage-text">
+                {formatUsd(usage.spentNanos)} / {formatUsd(usage.limitNanos)}
+              </span>
+            </span>
             <span className="account-email">{user.email}</span>
             {user.role === "admin" && <span className="badge">admin</span>}
             <button type="submit">Sign out</button>

@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  bigint,
   index,
   integer,
   jsonb,
@@ -28,6 +29,11 @@ export const users = pgTable(
     role: text("role", { enum: ["admin", "member"] })
       .notNull()
       .default("member"),
+    /**
+     * Monthly spending cap in nano-dollars. Null means "use the deployment
+     * default", so raising the default lifts everyone who has no override.
+     */
+    monthlyLimitNanos: bigint("monthly_limit_nanos", { mode: "number" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -137,12 +143,27 @@ export const agentRuns = pgTable(
     inputTokens: integer("input_tokens"),
     outputTokens: integer("output_tokens"),
     totalTokens: integer("total_tokens"),
+    /** Split out because cached input is billed at a tenth of the rate. */
+    cacheReadTokens: integer("cache_read_tokens"),
+    cacheWriteTokens: integer("cache_write_tokens"),
+    /**
+     * Cost of this turn in nano-dollars. Integer, so summing a month of runs
+     * involves no floating point drift. Denormalised deliberately: prices
+     * change, and a run should keep the cost it was actually billed at.
+     */
+    costNanos: bigint("cost_nanos", { mode: "number" }).notNull().default(0),
     durationMs: integer("duration_ms").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("agent_runs_conversation_idx").on(table.conversationId)],
+  (table) => [
+    index("agent_runs_conversation_idx").on(table.conversationId),
+    // The spend query is always "this user, this month", and agent_runs has no
+    // user column - it joins through conversations - so this index serves the
+    // date half of that.
+    index("agent_runs_created_at_idx").on(table.createdAt),
+  ],
 );
 
 export const usersRelations = relations(users, ({ many }) => ({

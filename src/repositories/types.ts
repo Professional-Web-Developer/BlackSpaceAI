@@ -37,6 +37,10 @@ export type AgentRunMetrics = {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  /** Cost of the turn in nano-dollars, priced when the turn finished. */
+  costNanos: number;
   durationMs: number;
 };
 

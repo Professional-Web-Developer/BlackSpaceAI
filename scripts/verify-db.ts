@@ -52,6 +52,7 @@ async function main(): Promise<void> {
     inputTokens: 120,
     outputTokens: 40,
     totalTokens: 160,
+    costNanos: 1_600_000,
     durationMs: 1234,
   });
 
@@ -99,6 +100,10 @@ async function main(): Promise<void> {
     "messages were removed with the conversation",
   );
 
+  // The verification user is removed too, so repeated runs do not leave a
+  // trail of accounts behind in a real database.
+  await removeVerificationUser(userId);
+
   console.log("All repository checks passed");
 }
 
@@ -120,6 +125,16 @@ async function createVerificationUser(): Promise<string> {
     .returning({ id: schema.users.id });
 
   return user.id;
+}
+
+async function removeVerificationUser(userId: string): Promise<void> {
+  const { isDatabaseEnabled } = await import("@/config/env");
+  if (!isDatabaseEnabled) return;
+
+  const { eq } = await import("drizzle-orm");
+  const { getDatabase, schema } = await import("@/db/client");
+
+  await getDatabase().delete(schema.users).where(eq(schema.users.id, userId));
 }
 
 main()

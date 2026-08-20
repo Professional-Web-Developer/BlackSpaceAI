@@ -544,3 +544,32 @@ a.attachment {
   text-decoration: none;
   color: var(--accent);
 }
+
+/* --- monthly usage meter --- */
+
+.usage {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 8rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  overflow: hidden;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent-soft);
+}
+
+.usage.over .usage-bar {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.usage-text {
+  position: relative;
+}

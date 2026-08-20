@@ -34,6 +34,7 @@ export const generalAgent: AgentProfileInput = {
   maxSteps: 12,
   effort: "high",
   thinking: true,
+  compaction: { triggerTokens: 150_000 },
 };
 
 export const researchAgent: AgentProfileInput = {
@@ -55,6 +56,13 @@ export const researchAgent: AgentProfileInput = {
   maxSteps: 20,
   effort: "xhigh",
   thinking: true,
+  // Twenty steps of fetched pages is what actually fills a context window
+  // here, so this is the agent that most needs compaction.
+  compaction: {
+    triggerTokens: 120_000,
+    instructions:
+      "Preserve the question being researched, every source URL seen so far and what each contributed, and any figures or quotes already gathered. Summarise navigation and dead ends.",
+  },
 };
 
 export const analystAgent: AgentProfileInput = {
@@ -81,6 +89,11 @@ export const analystAgent: AgentProfileInput = {
   maxSteps: 16,
   effort: "high",
   thinking: true,
+  compaction: {
+    triggerTokens: 150_000,
+    instructions:
+      "Preserve the dataset's shape, the code that produced each result, and the results themselves. Summarise failed attempts.",
+  },
 };
 
 export const knowledgeAgent: AgentProfileInput = {

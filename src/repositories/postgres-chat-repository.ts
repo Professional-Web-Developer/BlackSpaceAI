@@ -1,4 +1,4 @@
-import { count, desc, eq, asc } from "drizzle-orm";
+import { and, count, desc, eq, asc } from "drizzle-orm";
 
 import { getDatabase, schema } from "@/db/client";
 
@@ -18,11 +18,15 @@ export class PostgresChatRepository implements ChatRepository {
     return getDatabase();
   }
 
-  async listConversations(limit = 50): Promise<ConversationSummary[]> {
+  async listConversations(
+    userId: string,
+    limit = 50,
+  ): Promise<ConversationSummary[]> {
     // Left join + group by, so a conversation with no messages still appears.
     const rows = await this.db
       .select({
         id: schema.conversations.id,
+        userId: schema.conversations.userId,
         title: schema.conversations.title,
         agentId: schema.conversations.agentId,
         createdAt: schema.conversations.createdAt,
@@ -34,6 +38,7 @@ export class PostgresChatRepository implements ChatRepository {
         schema.messages,
         eq(schema.messages.conversationId, schema.conversations.id),
       )
+      .where(eq(schema.conversations.userId, userId))
       .groupBy(schema.conversations.id)
       .orderBy(desc(schema.conversations.updatedAt))
       .limit(limit);
@@ -41,11 +46,19 @@ export class PostgresChatRepository implements ChatRepository {
     return rows;
   }
 
-  async getConversation(id: string): Promise<Conversation | null> {
+  async getConversation(
+    id: string,
+    userId: string,
+  ): Promise<Conversation | null> {
     const [row] = await this.db
       .select()
       .from(schema.conversations)
-      .where(eq(schema.conversations.id, id))
+      .where(
+        and(
+          eq(schema.conversations.id, id),
+          eq(schema.conversations.userId, userId),
+        ),
+      )
       .limit(1);
 
     return row ?? null;
@@ -53,29 +66,52 @@ export class PostgresChatRepository implements ChatRepository {
 
   async createConversation(input: {
     id?: string;
+    userId: string;
     title: string;
     agentId: string;
   }): Promise<Conversation> {
     const [row] = await this.db
       .insert(schema.conversations)
-      .values({ id: input.id, title: input.title, agentId: input.agentId })
+      .values({
+        id: input.id,
+        userId: input.userId,
+        title: input.title,
+        agentId: input.agentId,
+      })
       .returning();
 
     return row;
   }
 
-  async renameConversation(id: string, title: string): Promise<void> {
+  async renameConversation(
+    id: string,
+    userId: string,
+    title: string,
+  ): Promise<void> {
     await this.db
       .update(schema.conversations)
       .set({ title, updatedAt: new Date() })
-      .where(eq(schema.conversations.id, id));
+      .where(
+        and(
+          eq(schema.conversations.id, id),
+          eq(schema.conversations.userId, userId),
+        ),
+      );
   }
 
-  async deleteConversation(id: string): Promise<boolean> {
+  async deleteConversation(id: string, userId: string): Promise<boolean> {
     // Messages and runs are removed by the ON DELETE CASCADE constraints.
+    // Scoping by owner means another user's id simply deletes nothing, which
+    // the caller reports as a 404 rather than a 403 - not revealing that the
+    // thread exists at all.
     const deleted = await this.db
       .delete(schema.conversations)
-      .where(eq(schema.conversations.id, id))
+      .where(
+        and(
+          eq(schema.conversations.id, id),
+          eq(schema.conversations.userId, userId),
+        ),
+      )
       .returning({ id: schema.conversations.id });
 
     return deleted.length > 0;

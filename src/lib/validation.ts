@@ -45,3 +45,16 @@ export const ingestDocumentSchema = z.object({
 });
 
 export const documentIdSchema = z.uuid("Invalid document id");
+
+/**
+ * Password rules follow NIST guidance: length is what matters, so a long
+ * minimum with no composition rules. The upper bound exists because the whole
+ * string is fed to scrypt, and an unbounded one is a cheap way to burn CPU.
+ */
+export const credentialsSchema = z.object({
+  email: z.email("Enter a valid email address").max(320),
+  password: z
+    .string()
+    .min(12, "Use at least 12 characters")
+    .max(200, "Passwords must be under 200 characters"),
+});

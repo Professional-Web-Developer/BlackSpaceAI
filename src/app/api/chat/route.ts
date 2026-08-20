@@ -6,6 +6,7 @@ import {
   type UIMessage,
 } from "ai";
 
+import { requireUser } from "@/auth/service";
 import { env } from "@/config/env";
 import { getModel, getProviderOptions } from "@/lib/agent";
 import { ConfigurationError, toErrorResponse } from "@/lib/errors";
@@ -26,6 +27,8 @@ export async function POST(request: Request) {
       await request.json(),
     );
 
+    const user = await requireUser();
+
     if (!env.ANTHROPIC_API_KEY) {
       throw new ConfigurationError(
         "ANTHROPIC_API_KEY is not set. Copy .env.example to .env.local.",
@@ -35,6 +38,7 @@ export async function POST(request: Request) {
     // History lives in the database, so the client sends only the new message.
     const turn = await prepareTurn({
       conversationId,
+      userId: user.id,
       agentId,
       message: message as {
         id: string;
@@ -52,6 +56,7 @@ export async function POST(request: Request) {
     return propagateAttributes(
       {
         sessionId: turn.conversation.id,
+        userId: user.id,
         tags: ["chat", `agent:${agent.id}`],
       },
       () => {

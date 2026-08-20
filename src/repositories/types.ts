@@ -2,6 +2,7 @@ import type { UIMessage } from "ai";
 
 export type Conversation = {
   id: string;
+  userId: string;
   title: string;
   /** Id of the agent profile that runs this thread. */
   agentId: string;
@@ -47,15 +48,21 @@ export type AgentRunMetrics = {
 export interface ChatRepository {
   readonly kind: "postgres" | "memory";
 
-  listConversations(limit?: number): Promise<ConversationSummary[]>;
-  getConversation(id: string): Promise<Conversation | null>;
+  /**
+   * Ownership is enforced here rather than in the routes. Every read and write
+   * takes the acting user, so a missed check in a handler cannot expose
+   * another user's thread - the query simply will not match.
+   */
+  listConversations(userId: string, limit?: number): Promise<ConversationSummary[]>;
+  getConversation(id: string, userId: string): Promise<Conversation | null>;
   createConversation(input: {
     id?: string;
+    userId: string;
     title: string;
     agentId: string;
   }): Promise<Conversation>;
-  renameConversation(id: string, title: string): Promise<void>;
-  deleteConversation(id: string): Promise<boolean>;
+  renameConversation(id: string, userId: string, title: string): Promise<void>;
+  deleteConversation(id: string, userId: string): Promise<boolean>;
 
   listMessages(conversationId: string): Promise<StoredMessage[]>;
   appendMessages(

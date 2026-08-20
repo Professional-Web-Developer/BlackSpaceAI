@@ -119,6 +119,63 @@ limit, and no incompatible pairs — the current web tools filter results by
 running code in Anthropic's sandbox already, so pairing them with an explicit
 `code_execution` tool gives the model two environments to confuse.
 
+## Accounts and access
+
+Sign-in is email and password. Everything except `/login` and the auth
+endpoints requires a session.
+
+```
+POST /api/auth/register   { email, password }
+POST /api/auth/login      { email, password }
+POST /api/auth/logout
+GET  /api/auth/me
+```
+
+**Who sees what**
+
+| | Members | Admins |
+| --- | --- | --- |
+| Their own conversations | read / write | read / write |
+| Other people's conversations | no access | no access |
+| Knowledge base documents | read | read, ingest, delete |
+
+Conversations are private per user. Admins are not superusers — they manage the
+shared knowledge base, they do not read other people's chats.
+
+Admins are named by `ADMIN_EMAILS` rather than promoted in the app, so the
+first person to register cannot make themselves one. The role is assigned when
+that address registers.
+
+**How it is built**
+
+- **Passwords** use scrypt from Node's standard library — memory-hard, accepted
+  by OWASP, and no native module to compile on a deploy target. The parameters
+  are stored alongside each hash, so they can be raised later without
+  invalidating existing passwords.
+- **Sessions are server-side**, not stateless tokens, so signing out revokes
+  access immediately. Only a SHA-256 hash of the session token is stored: a
+  leaked database does not hand over live sessions. Expiry slides on use,
+  written at most hourly so an active session is not a write per request.
+- **Ownership is enforced in the repository**, not the routes. Every
+  conversation read and write takes the acting user, so a forgotten check in a
+  handler cannot expose another user's thread — the query simply will not
+  match. A thread belonging to someone else returns 404, not 403, since a 403
+  would confirm it exists.
+- **Timing** is levelled on the login path: an unknown address still pays the
+  cost of a hash comparison, so response time does not enumerate accounts.
+  Registration reuses the login error text for the same reason.
+
+**Middleware is a redirect, not a guard.** It runs on the edge runtime and
+cannot reach the database, so it only checks that a session cookie is present —
+API paths get a 401, page requests get sent to `/login`. Real verification
+happens in `requireUser()`, which checks the session table. Never treat the
+middleware as the authorisation boundary.
+
+**Rate limiting is in-process** and resets on restart, so it is a speed bump
+against password guessing rather than a defence — a serverless deployment runs
+many instances, each with its own counter. Put a shared limiter in front of
+anything public.
+
 ## Retrieval (RAG)
 
 Documents are chunked, embedded and stored in Postgres with pgvector. The
@@ -260,6 +317,13 @@ src/
 │   ├── memory-chat-repository.ts
 │   └── index.ts                 adapter selection (the only place it happens)
 ├── db/                          schema, pooled client, migration runner
+├── auth/
+│   ├── password.ts              scrypt hashing and verification
+│   ├── session.ts               server-side sessions, hashed tokens
+│   ├── service.ts               register, login, requireUser, requireAdmin
+│   ├── cookie.ts                cookie name/attrs, edge-safe (no imports)
+│   └── rate-limit.ts            in-process throttle for credential endpoints
+├── middleware.ts                cookie-presence gate; not the auth boundary
 ├── config/env.ts                zod-validated environment, parsed once at startup
 └── lib/                         model settings, validation, errors, logger, tracing
 ```
@@ -302,6 +366,8 @@ npm run dev
 | `conversations` | One row per thread, including the agent that owns it |
 | `messages` | Role plus a JSONB `parts` array, so tool calls survive a round trip intact |
 | `agent_runs` | Per-turn metrics: agent, model, steps, finish reason, token counts, duration |
+| `users` | Accounts: email, scrypt hash, role |
+| `sessions` | Server-side sessions, storing only a hash of each token |
 | `documents` | Ingested source documents, full text kept for re-chunking |
 | `document_chunks` | Embedded passages, `vector(1024)` with an HNSW cosine index |
 

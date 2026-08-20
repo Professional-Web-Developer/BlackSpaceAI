@@ -22,6 +22,13 @@
       "when": 1787186816415,
       "tag": "0002_messy_the_santerians",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787188189669,
+      "tag": "0003_bitter_maestro",
+      "breakpoints": true
     }
   ]
 }

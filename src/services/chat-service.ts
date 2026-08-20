@@ -53,6 +53,7 @@ export type PreparedTurn = {
  */
 export async function prepareTurn(input: {
   conversationId: string;
+  userId: string;
   agentId?: string;
   message: { id: string; role: "user"; parts: UIMessage["parts"] };
 }): Promise<PreparedTurn> {
@@ -61,10 +62,16 @@ export async function prepareTurn(input: {
   // The client generates the thread id, so the first message of a new thread
   // creates it. That keeps the request idempotent and means the client never
   // has to wait for an id to come back before it can render.
+  //
+  // A thread id belonging to someone else does not resolve, so this creates a
+  // new empty thread for the caller rather than appending to theirs. The
+  // insert then fails on the primary key, which is the correct outcome: it
+  // never silently writes into another user's conversation.
   const conversation =
-    (await repository.getConversation(input.conversationId)) ??
+    (await repository.getConversation(input.conversationId, input.userId)) ??
     (await repository.createConversation({
       id: input.conversationId,
+      userId: input.userId,
       title: deriveTitle(input.message.parts),
       agentId: getAgentOrDefault(input.agentId).id,
     }));
@@ -154,16 +161,19 @@ function toSummaryDTO(summary: ConversationSummary): ConversationSummaryDTO {
 }
 
 export async function listConversations(
+  userId: string,
   limit?: number,
 ): Promise<ConversationSummaryDTO[]> {
-  const summaries = await getChatRepository().listConversations(limit);
+  const summaries = await getChatRepository().listConversations(userId, limit);
   return summaries.map(toSummaryDTO);
 }
 
-export async function getConversationWithMessages(id: string) {
+export async function getConversationWithMessages(id: string, userId: string) {
   const repository = getChatRepository();
 
-  const conversation = await repository.getConversation(id);
+  // Not found rather than forbidden when the thread belongs to someone else:
+  // a 403 would confirm the id exists.
+  const conversation = await repository.getConversation(id, userId);
   if (!conversation) throw new NotFoundError("Conversation");
 
   const messages = await repository.listMessages(id);
@@ -177,7 +187,10 @@ export async function getConversationWithMessages(id: string) {
   };
 }
 
-export async function deleteConversation(id: string): Promise<void> {
-  const deleted = await getChatRepository().deleteConversation(id);
+export async function deleteConversation(
+  id: string,
+  userId: string,
+): Promise<void> {
+  const deleted = await getChatRepository().deleteConversation(id, userId);
   if (!deleted) throw new NotFoundError("Conversation");
 }

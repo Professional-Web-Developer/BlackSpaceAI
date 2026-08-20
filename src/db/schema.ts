@@ -13,11 +13,65 @@ import type { UIMessage } from "ai";
 
 import { EMBEDDING_DIMENSIONS } from "@/rag/constants";
 
+/**
+ * An account. Email is stored lower-cased and unique, so lookups and the
+ * uniqueness guarantee agree - Postgres comparisons are case-sensitive, and
+ * without normalising, "Kavin@x.com" and "kavin@x.com" would be two accounts.
+ */
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull().unique(),
+    /** scrypt output plus its parameters and salt; see src/auth/password.ts. */
+    passwordHash: text("password_hash").notNull(),
+    role: text("role", { enum: ["admin", "member"] })
+      .notNull()
+      .default("member"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  },
+  (table) => [index("users_email_idx").on(table.email)],
+);
+
+/**
+ * Server-side sessions rather than stateless tokens, so signing out and
+ * revoking access take effect immediately. Only a hash of the session token is
+ * stored: a database leak then does not hand over live sessions.
+ */
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("sessions_token_hash_idx").on(table.tokenHash),
+    index("sessions_user_idx").on(table.userId),
+  ],
+);
+
 /** A chat thread. Deleting one cascades to its messages and runs. */
 export const conversations = pgTable(
   "conversations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Owner. Conversations are private to the user who created them. */
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     /**
      * Which agent profile ran this thread. Stored as a plain string rather
@@ -32,7 +86,11 @@ export const conversations = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("conversations_updated_at_idx").on(table.updatedAt)],
+  (table) => [
+    // The listing is always "this user's threads, newest first", so the index
+    // leads with the owner.
+    index("conversations_user_updated_idx").on(table.userId, table.updatedAt),
+  ],
 );
 
 /**
@@ -87,7 +145,20 @@ export const agentRuns = pgTable(
   (table) => [index("agent_runs_conversation_idx").on(table.conversationId)],
 );
 
-export const conversationsRelations = relations(conversations, ({ many }) => ({
+export const usersRelations = relations(users, ({ many }) => ({
+  conversations: many(conversations),
+  sessions: many(sessions),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, { fields: [sessions.userId], references: [users.id] }),
+}));
+
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  user: one(users, {
+    fields: [conversations.userId],
+    references: [users.id],
+  }),
   messages: many(messages),
   runs: many(agentRuns),
 }));
@@ -106,6 +177,8 @@ export const agentRunsRelations = relations(agentRuns, ({ one }) => ({
   }),
 }));
 
+export type UserRow = typeof users.$inferSelect;
+export type SessionRow = typeof sessions.$inferSelect;
 export type ConversationRow = typeof conversations.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;
 export type AgentRunRow = typeof agentRuns.$inferSelect;
@@ -123,6 +196,10 @@ export const documents = pgTable(
     /** Where this came from: a URL, a filename, an internal id. */
     source: text("source"),
     content: text("content").notNull(),
+    /** Who ingested it. Null for documents ingested by the CLI script. */
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

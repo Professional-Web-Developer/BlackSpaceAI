@@ -35,6 +35,8 @@ export async function ingestDocument(input: {
   content: string;
   source?: string;
   metadata?: Record<string, unknown>;
+  /** Null when ingested by the CLI script, which has no session. */
+  createdBy?: string;
 }): Promise<{ documentId: string; chunks: number }> {
   const chunks = chunkText(input.content);
   if (chunks.length === 0) {
@@ -56,6 +58,7 @@ export async function ingestDocument(input: {
         source: input.source,
         content: input.content,
         metadata: input.metadata,
+        createdBy: input.createdBy,
       })
       .returning({ id: schema.documents.id });
 

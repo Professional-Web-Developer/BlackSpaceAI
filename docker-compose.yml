@@ -2,7 +2,9 @@
 # Then set DATABASE_URL=postgres://postgres:postgres@localhost:5432/blackspace
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector image rather than plain postgres: the retrieval tables need the
+    # vector extension, which the stock image does not ship.
+    image: pgvector/pgvector:pg16
     container_name: blackspace-postgres
     restart: unless-stopped
     environment:

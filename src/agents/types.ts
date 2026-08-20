@@ -21,6 +21,15 @@ export type AgentProfileInput = {
   /** Which registered tools this agent may call. */
   tools: readonly ToolName[];
   /**
+   * Agent Skills to make available, by folder name under `skills/`. Claude
+   * loads a skill on demand during a turn, so unlike the system prompt they
+   * cost nothing until they are actually used.
+   *
+   * Skills execute inside the code execution sandbox, so a profile that lists
+   * them must also include the `code_execution` tool.
+   */
+  skills?: readonly string[];
+  /**
    * Anthropic model id. Omit it to follow the `ANTHROPIC_MODEL` environment
    * variable, which is what almost every agent should do; set it only to pin
    * one agent to a specific model regardless of the environment.

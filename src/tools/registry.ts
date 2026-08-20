@@ -3,6 +3,7 @@ import type { ToolSet } from "ai";
 
 import { calculate } from "./calculate";
 import { currentTime } from "./current-time";
+import { searchDocuments } from "./search-documents";
 import { searchKnowledgeBase } from "./search-knowledge-base";
 
 /**
@@ -24,6 +25,7 @@ export const toolRegistry = {
   calculate,
   current_time: currentTime,
   search_knowledge_base: searchKnowledgeBase,
+  search_documents: searchDocuments,
 
   web_search: anthropic.tools.webSearch_20260209({ maxUses: 8 }),
   web_fetch: anthropic.tools.webFetch_20260209({ maxUses: 8 }),
@@ -62,7 +64,8 @@ export function resolveTools(names: readonly ToolName[]): ToolSet {
 export const TOOL_LABELS: Record<ToolName, string> = {
   calculate: "Arithmetic",
   current_time: "Current time",
-  search_knowledge_base: "Knowledge base",
+  search_knowledge_base: "Built-in notes",
+  search_documents: "Knowledge base (RAG)",
   web_search: "Web search",
   web_fetch: "Web fetch",
   code_execution: "Code execution",

@@ -36,3 +36,12 @@ export const conversationIdSchema = z.uuid("Invalid conversation id");
 export const listConversationsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
+
+export const ingestDocumentSchema = z.object({
+  title: z.string().min(1).max(300),
+  content: z.string().min(20).max(1_000_000),
+  source: z.string().max(2000).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const documentIdSchema = z.uuid("Invalid document id");

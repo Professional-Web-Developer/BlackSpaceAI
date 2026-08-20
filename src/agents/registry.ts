@@ -47,6 +47,14 @@ function assertProfileIsValid(profile: AgentProfile): void {
     }
   }
 
+  // Skills are loaded by Claude inside the code execution sandbox; without
+  // that tool they are silently inert, which is worse than a boot failure.
+  if (profile.skills?.length && !profile.tools.includes("code_execution")) {
+    throw new Error(
+      `${where} lists skills but not the "code_execution" tool, which is what loads them.`,
+    );
+  }
+
   if (profile.maxSteps < 1) {
     throw new Error(`${where} has a maxSteps below 1.`);
   }

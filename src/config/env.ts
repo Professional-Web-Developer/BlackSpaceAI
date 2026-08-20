@@ -37,6 +37,32 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url().optional(),
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),
 
+  /**
+   * Embeddings for retrieval. Anthropic does not provide an embedding model,
+   * so this is the one pluggable provider. Retrieval is disabled entirely when
+   * the chosen provider has no key, and the rest of the app is unaffected.
+   */
+  EMBEDDING_PROVIDER: z.enum(["voyage", "openai"]).default("voyage"),
+  EMBEDDING_MODEL: z.string().min(1).default("voyage-3.5"),
+  VOYAGE_API_KEY: z.string().min(1).optional(),
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  /**
+   * Overrides the embedding provider's endpoint. Needed for a gateway, a
+   * self-hosted or Azure-style deployment, or a regional endpoint.
+   */
+  EMBEDDING_BASE_URL: z.string().url().optional(),
+  /**
+   * Similarity floor for retrieval, below which a passage is treated as "not
+   * found" rather than returned as weak evidence.
+   *
+   * This MUST be calibrated for the embedding model in use - models differ
+   * enormously in how they distribute cosine similarity, and a value that
+   * filters noise for one will reject every real match for another. The
+   * default suits voyage-3.5. See the README for how to tune it.
+   */
+  RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.35),
+  RAG_MAX_RESULTS: z.coerce.number().int().min(1).max(20).default(6),
+
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
   LANGFUSE_BASE_URL: z.string().url().default("https://cloud.langfuse.com"),

@@ -13,11 +13,15 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:verify": "tsx scripts/verify-db.ts"
+    "db:verify": "tsx scripts/verify-db.ts",
+    "skills:upload": "tsx scripts/upload-skills.ts",
+    "rag:ingest": "tsx scripts/ingest.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.39",
+    "@ai-sdk/openai": "^4.0.44",
     "@ai-sdk/react": "^4.0.71",
+    "@ai-sdk/voyage": "^2.0.28",
     "@anthropic-ai/sdk": "^0.120.0",
     "@langfuse/otel": "^5.10.1",
     "@langfuse/tracing": "^5.10.1",

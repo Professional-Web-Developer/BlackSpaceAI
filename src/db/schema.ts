@@ -7,8 +7,11 @@ import {
   text,
   timestamp,
   uuid,
+  vector,
 } from "drizzle-orm/pg-core";
 import type { UIMessage } from "ai";
+
+import { EMBEDDING_DIMENSIONS } from "@/rag/constants";
 
 /** A chat thread. Deleting one cascades to its messages and runs. */
 export const conversations = pgTable(
@@ -106,3 +109,69 @@ export const agentRunsRelations = relations(agentRuns, ({ one }) => ({
 export type ConversationRow = typeof conversations.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;
 export type AgentRunRow = typeof agentRuns.$inferSelect;
+
+/**
+ * A source document in the knowledge base. The full text is kept alongside the
+ * chunks so a document can be re-chunked and re-embedded when the chunking
+ * strategy or the embedding model changes, without re-fetching the original.
+ */
+export const documents = pgTable(
+  "documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    /** Where this came from: a URL, a filename, an internal id. */
+    source: text("source"),
+    content: text("content").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("documents_created_at_idx").on(table.createdAt)],
+);
+
+/**
+ * One embedded passage. The HNSW index is built for cosine distance, which is
+ * what the retrieval query uses - a mismatch between the two silently falls
+ * back to a sequential scan.
+ */
+export const documentChunks = pgTable(
+  "document_chunks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    /** Position within the document, so retrieved passages can be ordered. */
+    chunkIndex: integer("chunk_index").notNull(),
+    content: text("content").notNull(),
+    embedding: vector("embedding", {
+      dimensions: EMBEDDING_DIMENSIONS,
+    }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("document_chunks_document_idx").on(table.documentId),
+    index("document_chunks_embedding_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
+  ],
+);
+
+export const documentsRelations = relations(documents, ({ many }) => ({
+  chunks: many(documentChunks),
+}));
+
+export const documentChunksRelations = relations(documentChunks, ({ one }) => ({
+  document: one(documents, {
+    fields: [documentChunks.documentId],
+    references: [documents.id],
+  }),
+}));
+
+export type DocumentRow = typeof documents.$inferSelect;
+export type DocumentChunkRow = typeof documentChunks.$inferSelect;

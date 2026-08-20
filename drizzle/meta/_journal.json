@@ -15,6 +15,13 @@
       "when": 1787185039350,
       "tag": "0001_worthless_hellcat",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787186816415,
+      "tag": "0002_messy_the_santerians",
+      "breakpoints": true
     }
   ]
 }

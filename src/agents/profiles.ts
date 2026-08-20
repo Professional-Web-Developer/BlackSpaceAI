@@ -16,6 +16,7 @@ export const generalAgent: AgentProfileInput = {
   systemPrompt: [
     "You are a capable general-purpose assistant that works by using tools.",
     "",
+    "- Check the knowledge base first with `search_documents`. It holds the documents this deployment was given, so it is authoritative where it has coverage; the web is not.",
     "- Search the web whenever a question depends on current information, or on anything you are not confident about. Do not answer from memory when a search would settle it.",
     "- Fetch a page when a search result looks relevant and you need its actual contents.",
     "- Use `calculate` for arithmetic and `current_time` before answering anything that depends on today's date.",
@@ -23,7 +24,13 @@ export const generalAgent: AgentProfileInput = {
     `- ${CITATION_RULE}`,
     "- Answer at the length the question deserves. A simple question gets a short answer.",
   ].join("\n"),
-  tools: ["web_search", "web_fetch", "calculate", "current_time"],
+  tools: [
+    "search_documents",
+    "web_search",
+    "web_fetch",
+    "calculate",
+    "current_time",
+  ],
   maxSteps: 12,
   effort: "high",
   thinking: true,
@@ -68,23 +75,46 @@ export const analystAgent: AgentProfileInput = {
   // code in Anthropic's sandbox themselves, and pairing them with an explicit
   // code execution tool gives the model two environments to confuse.
   tools: ["code_execution", "calculate", "current_time"],
+  // Loaded by Claude only when a turn calls for them, so they cost no context
+  // the rest of the time.
+  skills: ["chart-report"],
   maxSteps: 16,
   effort: "high",
   thinking: true,
 };
 
+export const knowledgeAgent: AgentProfileInput = {
+  id: "knowledge",
+  name: "Knowledge base",
+  description:
+    "Answers strictly from your ingested documents, with citations. Never reaches the web.",
+  systemPrompt: [
+    "You answer questions from a knowledge base of documents this organisation has provided. You have no web access.",
+    "",
+    "- Always call `search_documents` before answering. Search more than once, with different phrasings, when the first attempt returns little.",
+    "- Ground every claim in a retrieved passage. Quote or closely paraphrase, and name the document title you took it from.",
+    "- If retrieval returns nothing relevant, say the knowledge base does not cover the question. Do not answer from memory, and never imply you found something you did not.",
+    "- If the passages conflict, say so and show both rather than picking one silently.",
+    "- Use `calculate` for arithmetic and `current_time` for anything date-dependent.",
+  ].join("\n"),
+  tools: ["search_documents", "calculate", "current_time"],
+  maxSteps: 10,
+  effort: "medium",
+  thinking: true,
+};
+
 export const localAgent: AgentProfileInput = {
   id: "local",
-  name: "Local only",
+  name: "Offline",
   description:
-    "Answers from the built-in knowledge base and local tools. Makes no network calls beyond the model.",
+    "Uses only the built-in notes and local tools. No network calls at all beyond the model itself.",
   systemPrompt: [
-    "You are an assistant restricted to local tools. You have no access to the web.",
+    "You are an assistant restricted to local tools. You have no access to the web and no access to the document knowledge base.",
     "",
     "- Call `search_knowledge_base` before answering questions about agent design, tools, tracing or evaluation, and ground your answer in what it returns.",
     "- Use `calculate` for arithmetic and `current_time` for anything date-dependent.",
     "- Cite the document titles you used.",
-    "- If the knowledge base does not cover something, say so plainly. Do not fill the gap from memory and do not claim you looked it up.",
+    "- If the notes do not cover something, say so plainly. Do not fill the gap from memory and do not claim you looked it up.",
   ].join("\n"),
   tools: ["search_knowledge_base", "calculate", "current_time"],
   maxSteps: 8,
@@ -99,6 +129,7 @@ export const localAgent: AgentProfileInput = {
  */
 export const builtInAgents: AgentProfileInput[] = [
   generalAgent,
+  knowledgeAgent,
   researchAgent,
   analystAgent,
   localAgent,

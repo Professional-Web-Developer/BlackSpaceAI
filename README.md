@@ -11,7 +11,8 @@ reasoning budget. Four ship in the box; building one for a new purpose means
 adding a profile.
 
 **Stack:** Next.js 16 (App Router) · Vercel AI SDK v7 · Claude (`claude-opus-5` by default)
-· Drizzle ORM + Postgres · Langfuse via OpenTelemetry · TypeScript
+· Drizzle ORM + Postgres/Supabase with pgvector · Voyage embeddings · Agent
+Skills · Langfuse via OpenTelemetry · TypeScript
 
 ---
 
@@ -32,10 +33,11 @@ source citations all stream to the browser as they are produced.
 
 | Agent | Tools | Purpose |
 | --- | --- | --- |
-| **General assistant** | web search, web fetch, arithmetic, time | Default. Open-ended questions; searches the web when it needs current information. |
+| **General assistant** | retrieval, web search, web fetch, arithmetic, time | Default. Checks your documents first, then the web. |
+| **Knowledge base** | retrieval, arithmetic, time | Answers strictly from your ingested documents, with citations. No web access. |
 | **Researcher** | web search, web fetch, time | Investigates across several sources, weighs disagreement, cites everything. 20 steps at `xhigh` effort. |
-| **Data analyst** | code execution, arithmetic, time | Writes and runs Python in Anthropic's sandbox to compute, analyse and plot. |
-| **Local only** | knowledge base, arithmetic, time | No network beyond the model. Answers from the in-repo document set. |
+| **Data analyst** | code execution, arithmetic, time (+ skills) | Writes and runs Python in Anthropic's sandbox to compute, analyse and plot. |
+| **Offline** | built-in notes, arithmetic, time | No network at all beyond the model itself. |
 
 Web search, web fetch and code execution run on Anthropic's infrastructure —
 there is no `execute` function to write and **no extra API keys**. One
@@ -117,6 +119,109 @@ limit, and no incompatible pairs — the current web tools filter results by
 running code in Anthropic's sandbox already, so pairing them with an explicit
 `code_execution` tool gives the model two environments to confuse.
 
+## Retrieval (RAG)
+
+Documents are chunked, embedded and stored in Postgres with pgvector. The
+`search_documents` tool runs a cosine-similarity search and hands passages back
+to the model with their document titles, so answers can be cited.
+
+```bash
+npm run rag:ingest -- ./docs/handbook.md ./docs/policy.md
+```
+
+or over HTTP:
+
+```
+POST   /api/documents      { title, content, source?, metadata? }
+GET    /api/documents
+DELETE /api/documents/:id
+```
+
+### How it is put together
+
+- **Chunking** splits on paragraph boundaries first, falling back to sentences,
+  and carries a 200-character overlap into the next chunk so a fact spanning a
+  boundary is retrievable from either side. Splitting purely on character count
+  is what makes naive RAG return half-sentences.
+- **Embedding** happens before the write transaction opens, so a slow network
+  call never holds a database connection.
+- **Voyage** is the default provider (`voyage-3.5`, natively 1024-wide) because
+  it is Anthropic's recommended pairing; OpenAI's `text-embedding-3-*` models
+  can emit 1024 too, so either fits the same column. Queries and stored
+  passages are embedded with different input types, which measurably improves
+  retrieval on Voyage.
+- **The vector column has a fixed width**, so `EMBEDDING_DIMENSIONS` is a
+  constant rather than an environment variable — a value read from the
+  environment would silently change what `drizzle-kit generate` produces.
+  Changing it means a migration and re-embedding everything.
+
+### Calibrate the similarity floor
+
+`RAG_MIN_SIMILARITY` decides when retrieval reports "nothing found" instead of
+returning the least-bad passages. This matters: without a floor, a question the
+knowledge base does not cover still gets passages back, and the model treats
+them as evidence.
+
+**The default of 0.35 suits `voyage-3.5` and is not portable.** Embedding
+models distribute cosine similarity very differently, and the wrong floor
+either floods answers with noise or rejects every real match. After changing
+the embedding model, calibrate it: ingest a handful of representative
+documents, run some questions you know are covered and some you know are not,
+and look at the scores.
+
+```bash
+psql "$DATABASE_URL" -c "SELECT title, count(*) FROM documents d
+  JOIN document_chunks c ON c.document_id = d.id GROUP BY title;"
+```
+
+Set the floor between the two clusters. If they overlap, that is a signal the
+chunking or the embedding model needs attention, not the threshold.
+
+### Supabase
+
+Supabase is Postgres, so it needs no special client — point `DATABASE_URL` at
+it and run the migrations. Two things to know:
+
+- The first migration runs `CREATE EXTENSION IF NOT EXISTS vector`. Supabase
+  ships pgvector, so this succeeds; you can also enable it from
+  **Database → Extensions** in the dashboard.
+- Use the **connection pooler** string for the app. `prepare: false` is already
+  set on the connection, which is required — prepared statements break
+  PgBouncer in transaction mode. Use the direct connection for migrations.
+
+## Agent Skills
+
+A skill is a folder of instructions and scripts that Claude loads **on demand**
+during a turn. Unlike the system prompt, a skill costs no context until it is
+actually used, which is what makes it the right home for a long procedure you
+only occasionally need.
+
+```
+skills/
+└── chart-report/
+    └── SKILL.md
+```
+
+Upload them, then reference them by folder name on a profile:
+
+```bash
+npm run skills:upload      # writes skills/uploaded.json
+```
+
+```ts
+tools: ["code_execution", "calculate", "current_time"],
+skills: ["chart-report"],
+```
+
+Skills execute **inside the code execution sandbox**, so a profile listing them
+must also include `code_execution` — the registry rejects the combination at
+startup otherwise, because a skill without that tool is silently inert.
+
+`skills/uploaded.json` maps folder names to the ids Anthropic returned. It is
+gitignored, since ids are per-account: re-run the upload after switching
+accounts. A skill that has not been uploaded logs a warning and the agent runs
+without it, so a fresh clone works before you have uploaded anything.
+
 ## Architecture
 
 The code is layered so each concern has one home, and the layers depend
@@ -131,9 +236,16 @@ src/
 │   └── types.ts
 ├── tools/
 │   ├── registry.ts              every tool, keyed by the name the model sees
+│   ├── search-documents.ts      retrieval over the ingested knowledge base
 │   ├── calculate.ts             local tools: our code, our `execute`
 │   ├── current-time.ts
 │   └── search-knowledge-base.ts
+├── rag/
+│   ├── chunking.ts              paragraph-aware splitting with overlap
+│   ├── embeddings.ts            pluggable provider (Voyage or OpenAI)
+│   ├── store.ts                 ingestion and vector search
+│   └── constants.ts             embedding width, chunk sizes
+├── skills/registry.ts           resolves skill names to uploaded ids
 ├── app/
 │   ├── page.tsx                 server component; sidebar rendered with SSR data
 │   └── api/
@@ -190,6 +302,8 @@ npm run dev
 | `conversations` | One row per thread, including the agent that owns it |
 | `messages` | Role plus a JSONB `parts` array, so tool calls survive a round trip intact |
 | `agent_runs` | Per-turn metrics: agent, model, steps, finish reason, token counts, duration |
+| `documents` | Ingested source documents, full text kept for re-chunking |
+| `document_chunks` | Embedded passages, `vector(1024)` with an HNSW cosine index |
 
 Messages and runs are removed with their conversation by `ON DELETE CASCADE`.
 Storing `parts` as JSONB rather than flattening to a string is what makes a
@@ -263,6 +377,8 @@ npm run db:generate  # generate a migration from schema changes
 npm run db:migrate   # apply migrations
 npm run db:studio    # browse the database
 npm run db:verify    # round-trip the configured repository
+npm run rag:ingest   # ingest local files into the knowledge base
+npm run skills:upload # upload skills/ to Anthropic
 ```
 
 TypeScript is pinned to 6.x: `eslint-config-next` pulls `typescript-eslint`,

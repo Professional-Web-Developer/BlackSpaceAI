@@ -15,4 +15,7 @@ next-env.d.ts
 npm-debug.log*
 yarn-error.log*
 .vercel
+
+# Skill ids are per Anthropic account; regenerate with `npm run skills:upload`
+skills/uploaded.json
 coverage/

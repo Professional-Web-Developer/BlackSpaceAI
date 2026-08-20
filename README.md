@@ -317,6 +317,9 @@ src/
 │   ├── memory-chat-repository.ts
 │   └── index.ts                 adapter selection (the only place it happens)
 ├── db/                          schema, pooled client, migration runner
+├── storage/
+│   ├── s3.ts                    presigning, and reading an object back
+│   └── resolve-attachments.ts   swaps stored refs for signed URLs per turn
 ├── auth/
 │   ├── password.ts              scrypt hashing and verification
 │   ├── session.ts               server-side sessions, hashed tokens
@@ -368,6 +371,7 @@ npm run dev
 | `agent_runs` | Per-turn metrics: agent, model, steps, finish reason, token counts, duration |
 | `users` | Accounts: email, scrypt hash, role |
 | `sessions` | Server-side sessions, storing only a hash of each token |
+| `attachments` | Uploaded files: owner, object key, type and size |
 | `documents` | Ingested source documents, full text kept for re-chunking |
 | `document_chunks` | Embedded passages, `vector(1024)` with an HNSW cosine index |
 
@@ -392,10 +396,43 @@ service changes.
 
 ## Attachments
 
-Images, PDFs and text files can be attached to a message and are sent to Claude
-natively. The client caps this at 4 files and 8 MB per message — attachments
-are stored inline in the message row, so raising the cap means thinking about
-row size. For anything larger, upload to object storage and pass a URL.
+Images, PDFs and text files can be attached to a message and are read by Claude
+natively. They upload **straight from the browser to S3**, so the bytes never
+pass through this server: no request-body limit to work around, no memory spent
+proxying, and no function timeout on a slow connection.
+
+```
+POST /api/uploads/presign    authorise one upload  -> { uploadUrl, attachmentUrl }
+PUT  <uploadUrl>             browser -> S3 directly
+POST /api/uploads/confirm    verify and mark complete
+GET  /api/attachments/:id    authorised redirect to a freshly signed URL
+```
+
+**What the signature covers.** The presigned PUT signs the content type and
+content length, so a client cannot upload a different type or a larger file
+than the server approved — the signature simply will not match.
+
+**And a check that does not trust it.** On confirm, the server reads the stored
+object back and compares its real size and type against what was authorised. A
+mismatch deletes the object and the row. Signed conditions are enforced by S3;
+this is enforced here, and the two failing together is much less likely than
+either alone.
+
+**Stored references, not signed URLs.** A message row carries
+`/api/attachments/<id>`, never a signed URL. Signed URLs expire and work for
+anyone holding them, so a conversation containing one would rot and leak. That
+path is authorised per request and redirects to a URL signed on the spot.
+Before each turn, references are swapped for short-lived signed URLs the model
+can fetch; an id that is missing or belongs to someone else is dropped from the
+turn rather than handed over.
+
+Set `AWS_REGION` and `S3_BUCKET` to enable it. Without them the attach control
+is hidden and everything else works unchanged. Omit the access keys to use the
+default credential chain — an IAM role is preferable to long-lived keys.
+
+The bucket needs no public access: every read goes through a signed URL. Worth
+adding a lifecycle rule to expire objects whose `attachments` row was never
+confirmed.
 
 ## Observability
 

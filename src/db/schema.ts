@@ -184,6 +184,40 @@ export type MessageRow = typeof messages.$inferSelect;
 export type AgentRunRow = typeof agentRuns.$inferSelect;
 
 /**
+ * A file uploaded straight to S3 by the browser.
+ *
+ * The row is written when the upload is authorised, before the bytes exist, so
+ * a row with `uploadedAt` still null means the browser never finished. Those
+ * are safe to sweep.
+ */
+export const attachments = pgTable(
+  "attachments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Object key in the bucket; never exposed to the client. */
+    objectKey: text("object_key").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** Set when the browser confirms the upload finished. */
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }),
+  },
+  (table) => [index("attachments_user_idx").on(table.userId)],
+);
+
+export const attachmentsRelations = relations(attachments, ({ one }) => ({
+  user: one(users, { fields: [attachments.userId], references: [users.id] }),
+}));
+
+export type AttachmentRow = typeof attachments.$inferSelect;
+
+/**
  * A source document in the knowledge base. The full text is kept alongside the
  * chunks so a document can be re-chunked and re-embedded when the chunking
  * strategy or the embedding model changes, without re-fetching the original.

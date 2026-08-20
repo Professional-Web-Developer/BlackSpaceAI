@@ -23,6 +23,8 @@
     "@ai-sdk/react": "^4.0.71",
     "@ai-sdk/voyage": "^2.0.28",
     "@anthropic-ai/sdk": "^0.120.0",
+    "@aws-sdk/client-s3": "^3.1114.0",
+    "@aws-sdk/s3-request-presigner": "^3.1114.0",
     "@langfuse/otel": "^5.10.1",
     "@langfuse/tracing": "^5.10.1",
     "@langfuse/vercel-ai-sdk": "^5.10.1",

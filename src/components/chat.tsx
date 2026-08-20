@@ -13,9 +13,16 @@ type ChatProps = {
   /** Rendered on the server, so the sidebar has content on first paint. */
   initialConversations: ConversationSummaryDTO[];
   agents: AgentSummary[];
+  maxUploadMb: number;
+  uploadsEnabled: boolean;
 };
 
-export function Chat({ initialConversations, agents }: ChatProps) {
+export function Chat({
+  initialConversations,
+  agents,
+  maxUploadMb,
+  uploadsEnabled,
+}: ChatProps) {
   // The client mints the thread id so the first message already belongs to an
   // addressable conversation; the server creates the row on first use.
   const [conversationId, setConversationId] = useState(() =>
@@ -125,6 +132,8 @@ export function Chat({ initialConversations, agents }: ChatProps) {
           agent={activeAgent}
           initialMessages={initialMessages}
           onTurnComplete={() => void refreshConversations()}
+          maxUploadMb={maxUploadMb}
+          uploadsEnabled={uploadsEnabled}
         />
       </section>
     </div>

@@ -22,8 +22,12 @@ export class MemoryChatRepository implements ChatRepository {
   private readonly messages = new Map<string, StoredMessage[]>();
   private readonly runs: AgentRunMetrics[] = [];
 
-  async listConversations(limit = 50): Promise<ConversationSummary[]> {
+  async listConversations(
+    userId: string,
+    limit = 50,
+  ): Promise<ConversationSummary[]> {
     return [...this.conversations.values()]
+      .filter((conversation) => conversation.userId === userId)
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
       .slice(0, limit)
       .map((conversation) => ({
@@ -32,18 +36,24 @@ export class MemoryChatRepository implements ChatRepository {
       }));
   }
 
-  async getConversation(id: string): Promise<Conversation | null> {
-    return this.conversations.get(id) ?? null;
+  async getConversation(
+    id: string,
+    userId: string,
+  ): Promise<Conversation | null> {
+    const conversation = this.conversations.get(id);
+    return conversation?.userId === userId ? conversation : null;
   }
 
   async createConversation(input: {
     id?: string;
+    userId: string;
     title: string;
     agentId: string;
   }): Promise<Conversation> {
     const now = new Date();
     const conversation: Conversation = {
       id: input.id ?? randomUUID(),
+      userId: input.userId,
       title: input.title,
       agentId: input.agentId,
       createdAt: now,
@@ -55,13 +65,18 @@ export class MemoryChatRepository implements ChatRepository {
     return conversation;
   }
 
-  async renameConversation(id: string, title: string): Promise<void> {
+  async renameConversation(
+    id: string,
+    userId: string,
+    title: string,
+  ): Promise<void> {
     const conversation = this.conversations.get(id);
-    if (!conversation) return;
+    if (conversation?.userId !== userId) return;
     this.conversations.set(id, { ...conversation, title, updatedAt: new Date() });
   }
 
-  async deleteConversation(id: string): Promise<boolean> {
+  async deleteConversation(id: string, userId: string): Promise<boolean> {
+    if (this.conversations.get(id)?.userId !== userId) return false;
     this.messages.delete(id);
     return this.conversations.delete(id);
   }

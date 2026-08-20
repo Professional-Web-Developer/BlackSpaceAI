@@ -63,6 +63,22 @@ const envSchema = z.object({
   RAG_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.35),
   RAG_MAX_RESULTS: z.coerce.number().int().min(1).max(20).default(6),
 
+  /**
+   * Addresses that get the admin role when they register. Admins are the only
+   * accounts that can ingest or delete knowledge base documents. Naming them
+   * here rather than promoting in-app means the first person to sign up cannot
+   * make themselves one.
+   */
+  ADMIN_EMAILS: z
+    .string()
+    .optional()
+    .transform((value) =>
+      (value ?? "")
+        .split(",")
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
   LANGFUSE_BASE_URL: z.string().url().default("https://cloud.langfuse.com"),

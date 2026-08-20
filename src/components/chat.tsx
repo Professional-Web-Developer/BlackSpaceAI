@@ -3,22 +3,26 @@
 import type { UIMessage } from "ai";
 import { useCallback, useState } from "react";
 
+import type { AgentSummary } from "@/agents/types";
 import type { ConversationSummaryDTO } from "@/services/chat-service";
 
+import { AgentPicker } from "./agent-picker";
 import { ChatPanel } from "./chat-panel";
 
 type ChatProps = {
   /** Rendered on the server, so the sidebar has content on first paint. */
   initialConversations: ConversationSummaryDTO[];
+  agents: AgentSummary[];
 };
 
-export function Chat({ initialConversations }: ChatProps) {
+export function Chat({ initialConversations, agents }: ChatProps) {
   // The client mints the thread id so the first message already belongs to an
   // addressable conversation; the server creates the row on first use.
   const [conversationId, setConversationId] = useState(() =>
     crypto.randomUUID(),
   );
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
+  const [agentId, setAgentId] = useState(agents[0]?.id ?? "general");
   const [conversations, setConversations] =
     useState<ConversationSummaryDTO[]>(initialConversations);
 
@@ -39,8 +43,13 @@ export function Chat({ initialConversations }: ChatProps) {
   async function openConversation(id: string) {
     const response = await fetch(`/api/conversations/${id}`);
     if (!response.ok) return;
-    const data: { messages: UIMessage[] } = await response.json();
+    const data: {
+      conversation: { agentId: string };
+      messages: UIMessage[];
+    } = await response.json();
+
     setInitialMessages(data.messages);
+    setAgentId(data.conversation.agentId);
     setConversationId(id);
   }
 
@@ -55,10 +64,19 @@ export function Chat({ initialConversations }: ChatProps) {
     await refreshConversations();
   }
 
+  const activeAgent = agents.find((agent) => agent.id === agentId) ?? agents[0];
+  // The agent is fixed once a thread has history: past tool calls came from
+  // that agent's tool set and would not resolve against a different one.
+  const isAgentLocked = initialMessages.length > 0;
+
   return (
     <div className="layout">
       <aside className="sidebar">
-        <button type="button" className="new-chat" onClick={startNewConversation}>
+        <button
+          type="button"
+          className="new-chat"
+          onClick={startNewConversation}
+        >
           New conversation
         </button>
         <ul>
@@ -72,7 +90,10 @@ export function Chat({ initialConversations }: ChatProps) {
                 onClick={() => void openConversation(conversation.id)}
               >
                 <span className="title">{conversation.title}</span>
-                <span className="meta">{conversation.messageCount} messages</span>
+                <span className="meta">
+                  {conversation.agentName} &middot; {conversation.messageCount}{" "}
+                  messages
+                </span>
               </button>
               <button
                 type="button"
@@ -91,9 +112,17 @@ export function Chat({ initialConversations }: ChatProps) {
       </aside>
 
       <section className="conversation">
+        <AgentPicker
+          agents={agents}
+          selectedId={agentId}
+          locked={isAgentLocked}
+          onSelect={setAgentId}
+        />
         <ChatPanel
           key={conversationId}
           conversationId={conversationId}
+          agentId={agentId}
+          agent={activeAgent}
           initialMessages={initialMessages}
           onTurnComplete={() => void refreshConversations()}
         />

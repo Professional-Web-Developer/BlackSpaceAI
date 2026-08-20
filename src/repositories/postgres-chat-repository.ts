@@ -24,6 +24,7 @@ export class PostgresChatRepository implements ChatRepository {
       .select({
         id: schema.conversations.id,
         title: schema.conversations.title,
+        agentId: schema.conversations.agentId,
         createdAt: schema.conversations.createdAt,
         updatedAt: schema.conversations.updatedAt,
         messageCount: count(schema.messages.id),
@@ -53,10 +54,11 @@ export class PostgresChatRepository implements ChatRepository {
   async createConversation(input: {
     id?: string;
     title: string;
+    agentId: string;
   }): Promise<Conversation> {
     const [row] = await this.db
       .insert(schema.conversations)
-      .values({ id: input.id, title: input.title })
+      .values({ id: input.id, title: input.title, agentId: input.agentId })
       .returning();
 
     return row;

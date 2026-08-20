@@ -1,5 +1,6 @@
 import type { UIMessage } from "ai";
 
+import { getAgentOrDefault, type AgentProfile } from "@/agents/registry";
 import { logger } from "@/lib/logger";
 import { NotFoundError } from "@/lib/errors";
 import { getChatRepository } from "@/repositories";
@@ -39,6 +40,8 @@ export function toUIMessage(message: StoredMessage): UIMessage {
 
 export type PreparedTurn = {
   conversation: Conversation;
+  /** The profile that runs this turn. */
+  agent: AgentProfile;
   /** Full history including the message that was just persisted. */
   messages: UIMessage[];
 };
@@ -50,6 +53,7 @@ export type PreparedTurn = {
  */
 export async function prepareTurn(input: {
   conversationId: string;
+  agentId?: string;
   message: { id: string; role: "user"; parts: UIMessage["parts"] };
 }): Promise<PreparedTurn> {
   const repository = getChatRepository();
@@ -62,7 +66,14 @@ export async function prepareTurn(input: {
     (await repository.createConversation({
       id: input.conversationId,
       title: deriveTitle(input.message.parts),
+      agentId: getAgentOrDefault(input.agentId).id,
     }));
+
+  // An existing thread keeps the agent it started with: its history was
+  // produced by that agent's tools, and replaying it through a different tool
+  // set would leave tool calls the new agent does not recognise. The agent is
+  // chosen once, when the thread is created.
+  const agent = getAgentOrDefault(conversation.agentId);
 
   const history = await repository.listMessages(conversation.id);
 
@@ -72,6 +83,7 @@ export async function prepareTurn(input: {
 
   return {
     conversation,
+    agent,
     messages: [...history.map(toUIMessage), toUIMessage(persisted)],
   };
 }
@@ -118,15 +130,23 @@ export async function completeTurn(input: {
 export type ConversationSummaryDTO = {
   id: string;
   title: string;
+  agentId: string;
+  agentName: string;
   createdAt: string;
   updatedAt: string;
   messageCount: number;
 };
 
 function toSummaryDTO(summary: ConversationSummary): ConversationSummaryDTO {
+  // Resolved rather than raw: a thread whose agent has since been removed
+  // reports the fallback, so every id the client sees matches a live agent.
+  const agent = getAgentOrDefault(summary.agentId);
+
   return {
     id: summary.id,
     title: summary.title,
+    agentId: agent.id,
+    agentName: agent.name,
     createdAt: summary.createdAt.toISOString(),
     updatedAt: summary.updatedAt.toISOString(),
     messageCount: summary.messageCount,
@@ -147,7 +167,14 @@ export async function getConversationWithMessages(id: string) {
   if (!conversation) throw new NotFoundError("Conversation");
 
   const messages = await repository.listMessages(id);
-  return { conversation, messages: messages.map(toUIMessage) };
+  return {
+    conversation: {
+      id: conversation.id,
+      title: conversation.title,
+      agentId: getAgentOrDefault(conversation.agentId).id,
+    },
+    messages: messages.map(toUIMessage),
+  };
 }
 
 export async function deleteConversation(id: string): Promise<void> {

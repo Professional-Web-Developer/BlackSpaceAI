@@ -1,32 +1,34 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import type { AnthropicProviderOptions } from "@ai-sdk/anthropic";
 
-/** Anthropic's most capable generally available model. */
-export const MODEL_ID = "claude-opus-5";
+import type { AgentProfile } from "@/agents/registry";
 
-export const model = anthropic(MODEL_ID);
+/** Model instance for a profile. Cached, since profiles are a fixed set. */
+const modelCache = new Map<string, ReturnType<typeof anthropic>>();
+
+export function getModel(profile: AgentProfile) {
+  const cached = modelCache.get(profile.model);
+  if (cached) return cached;
+
+  const model = anthropic(profile.model);
+  modelCache.set(profile.model, model);
+  return model;
+}
 
 /**
- * Upper bound on model calls per request. Every tool result triggers another
- * call, so this is what stops a loop from running away.
+ * Provider settings derived from a profile.
+ *
+ * Adaptive thinking lets the model decide how much to reason per step rather
+ * than spending a fixed token budget; `summarized` is what makes the reasoning
+ * visible in the UI. Effort controls overall depth and token spend.
  */
-export const MAX_STEPS = 10;
-
-export const SYSTEM_PROMPT = [
-  "You are a research assistant that works by using tools.",
-  "",
-  "- Call `searchKnowledgeBase` before answering questions about agent design, tools, tracing or evaluation, and ground your answer in what it returns.",
-  "- Call `calculate` for arithmetic. Do not compute results yourself.",
-  "- Call `getCurrentTime` before answering anything that depends on the current date or time.",
-  "- You may call several tools in one turn, and call more after seeing results.",
-  "- Cite the document titles you used. If the tools do not cover something, say so instead of guessing.",
-].join("\n");
-
-export const providerOptions = {
-  anthropic: {
-    // Adaptive thinking lets the model decide how much to reason per step;
-    // `summarized` streams a readable summary to the client.
-    thinking: { type: "adaptive", display: "summarized" },
-    effort: "high",
-  } satisfies AnthropicProviderOptions,
-};
+export function getProviderOptions(profile: AgentProfile) {
+  return {
+    anthropic: {
+      thinking: profile.thinking
+        ? { type: "adaptive", display: "summarized" }
+        : { type: "disabled" },
+      effort: profile.effort,
+    } satisfies AnthropicProviderOptions,
+  };
+}

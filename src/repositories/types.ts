@@ -3,6 +3,8 @@ import type { UIMessage } from "ai";
 export type Conversation = {
   id: string;
   title: string;
+  /** Id of the agent profile that runs this thread. */
+  agentId: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -27,6 +29,7 @@ export type NewMessage = {
 
 export type AgentRunMetrics = {
   conversationId: string;
+  agentId: string;
   model: string;
   steps: number;
   finishReason: string;
@@ -46,7 +49,11 @@ export interface ChatRepository {
 
   listConversations(limit?: number): Promise<ConversationSummary[]>;
   getConversation(id: string): Promise<Conversation | null>;
-  createConversation(input: { id?: string; title: string }): Promise<Conversation>;
+  createConversation(input: {
+    id?: string;
+    title: string;
+    agentId: string;
+  }): Promise<Conversation>;
   renameConversation(id: string, title: string): Promise<void>;
   deleteConversation(id: string): Promise<boolean>;
 

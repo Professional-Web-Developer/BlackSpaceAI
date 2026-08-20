@@ -8,6 +8,13 @@
       "when": 1787145507873,
       "tag": "0000_high_stick",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787185039350,
+      "tag": "0001_worthless_hellcat",
+      "breakpoints": true
     }
   ]
 }

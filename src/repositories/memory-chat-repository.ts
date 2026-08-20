@@ -39,11 +39,13 @@ export class MemoryChatRepository implements ChatRepository {
   async createConversation(input: {
     id?: string;
     title: string;
+    agentId: string;
   }): Promise<Conversation> {
     const now = new Date();
     const conversation: Conversation = {
       id: input.id ?? randomUUID(),
       title: input.title,
+      agentId: input.agentId,
       createdAt: now,
       updatedAt: now,
     };

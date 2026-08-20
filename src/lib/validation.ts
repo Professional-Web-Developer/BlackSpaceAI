@@ -19,6 +19,12 @@ export const incomingMessageSchema = z.object({
 export const chatRequestSchema = z.object({
   /** Client-generated, so the thread is addressable from the first message. */
   conversationId: z.uuid(),
+  /**
+   * Which agent to run. Only honoured when the thread is being created; an
+   * existing thread keeps the agent it started with. Unknown ids fall back to
+   * the default rather than failing the request.
+   */
+  agentId: z.string().min(1).max(64).optional(),
   /** Only the new message is sent; history is loaded server-side. */
   message: incomingMessageSchema,
 });

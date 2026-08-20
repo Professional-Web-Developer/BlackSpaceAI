@@ -19,6 +19,7 @@ async function main(): Promise<void> {
 
   const conversation = await repository.createConversation({
     title: "Verification thread",
+    agentId: "general",
   });
   assert(conversation.id, "conversation received an id");
 
@@ -37,6 +38,7 @@ async function main(): Promise<void> {
 
   await repository.recordRun({
     conversationId: conversation.id,
+    agentId: "general",
     model: "claude-opus-5",
     steps: 2,
     finishReason: "stop",

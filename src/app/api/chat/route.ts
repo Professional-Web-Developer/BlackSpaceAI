@@ -7,22 +7,22 @@ import {
 } from "ai";
 
 import { env } from "@/config/env";
-import { MAX_STEPS, MODEL_ID, SYSTEM_PROMPT, model, providerOptions } from "@/lib/agent";
+import { getModel, getProviderOptions } from "@/lib/agent";
 import { ConfigurationError, toErrorResponse } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { flushTraces } from "@/lib/observability";
-import { tools } from "@/lib/tools";
 import { chatRequestSchema } from "@/lib/validation";
+import { resolveTools } from "@/tools/registry";
 import { completeTurn, prepareTurn } from "@/services/chat-service";
 
 // The agent loop makes several sequential model calls; give it room.
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   try {
     // Validated before the configuration check, so a malformed request is
     // always a 400 and never masked by a server-side misconfiguration.
-    const { conversationId, message } = chatRequestSchema.parse(
+    const { conversationId, agentId, message } = chatRequestSchema.parse(
       await request.json(),
     );
 
@@ -35,29 +35,39 @@ export async function POST(request: Request) {
     // History lives in the database, so the client sends only the new message.
     const turn = await prepareTurn({
       conversationId,
-      message: message as { id: string; role: "user"; parts: UIMessage["parts"] },
+      agentId,
+      message: message as {
+        id: string;
+        role: "user";
+        parts: UIMessage["parts"];
+      },
     });
 
+    const { agent } = turn;
     const modelMessages = await convertToModelMessages(turn.messages);
     const startedAt = Date.now();
 
     // Everything inside this callback is grouped into one Langfuse trace and
-    // attributed to the conversation it belongs to.
+    // attributed to the conversation and the agent that produced it.
     return propagateAttributes(
-      { sessionId: turn.conversation.id, tags: ["chat"] },
+      {
+        sessionId: turn.conversation.id,
+        tags: ["chat", `agent:${agent.id}`],
+      },
       () => {
         const result = streamText({
-          model,
-          system: SYSTEM_PROMPT,
+          model: getModel(agent),
+          system: agent.systemPrompt,
           messages: modelMessages,
-          tools,
-          stopWhen: stepCountIs(MAX_STEPS),
-          providerOptions,
-          telemetry: { functionId: "agentic-chat" },
+          tools: resolveTools(agent.tools),
+          stopWhen: stepCountIs(agent.maxSteps),
+          providerOptions: getProviderOptions(agent),
+          telemetry: { functionId: `agent:${agent.id}` },
         });
 
         return result.toUIMessageStreamResponse({
           sendReasoning: true,
+          sendSources: true,
           originalMessages: turn.messages,
           onFinish: async ({ responseMessage, isAborted }) => {
             try {
@@ -72,7 +82,8 @@ export async function POST(request: Request) {
                   conversationId: turn.conversation.id,
                   assistantMessage: responseMessage,
                   metrics: {
-                    model: MODEL_ID,
+                    agentId: agent.id,
+                    model: agent.model,
                     steps: steps.length,
                     finishReason,
                     inputTokens: usage.inputTokens,

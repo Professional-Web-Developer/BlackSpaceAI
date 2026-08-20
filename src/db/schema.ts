@@ -16,6 +16,12 @@ export const conversations = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     title: text("title").notNull(),
+    /**
+     * Which agent profile ran this thread. Stored as a plain string rather
+     * than an enum so adding a profile does not require a migration; unknown
+     * ids fall back to the default when a thread is reopened.
+     */
+    agentId: text("agent_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -63,6 +69,7 @@ export const agentRuns = pgTable(
     conversationId: uuid("conversation_id")
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),
+    agentId: text("agent_id").notNull(),
     model: text("model").notNull(),
     steps: integer("steps").notNull(),
     finishReason: text("finish_reason").notNull(),

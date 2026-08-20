@@ -1,3 +1,4 @@
+import { env } from "@/config/env";
 import { NotFoundError } from "@/lib/errors";
 import {
   INCOMPATIBLE_TOOL_PAIRS,
@@ -7,12 +8,20 @@ import {
 } from "@/tools/registry";
 
 import { builtInAgents, DEFAULT_AGENT_ID } from "./profiles";
-import type { AgentProfile, AgentSummary } from "./types";
+import type { AgentProfile, AgentProfileInput, AgentSummary } from "./types";
 
 /**
  * Validated once, at module load, so a malformed profile is a startup failure
  * rather than a confusing model response in production.
  */
+/**
+ * Fills in the model an agent did not pin. Done once, when profiles load, so
+ * routes, metrics and the model cache all read the same resolved value.
+ */
+function resolveProfile(profile: AgentProfileInput): AgentProfile {
+  return { ...profile, model: profile.model ?? env.ANTHROPIC_MODEL };
+}
+
 function assertProfileIsValid(profile: AgentProfile): void {
   const where = `Agent "${profile.id}"`;
 
@@ -50,10 +59,13 @@ function assertProfileIsValid(profile: AgentProfile): void {
   }
 }
 
-function buildRegistry(profiles: AgentProfile[]): Map<string, AgentProfile> {
+function buildRegistry(
+  profiles: AgentProfileInput[],
+): Map<string, AgentProfile> {
   const registry = new Map<string, AgentProfile>();
 
-  for (const profile of profiles) {
+  for (const input of profiles) {
+    const profile = resolveProfile(input);
     assertProfileIsValid(profile);
     if (registry.has(profile.id)) {
       throw new Error(`Duplicate agent id "${profile.id}".`);
@@ -109,4 +121,4 @@ export function listAgentSummaries(): AgentSummary[] {
 }
 
 export { DEFAULT_AGENT_ID } from "./profiles";
-export type { AgentProfile, AgentSummary } from "./types";
+export type { AgentProfile, AgentProfileInput, AgentSummary } from "./types";

@@ -10,7 +10,7 @@ An agent here is a **configuration**, not code. A prompt, a set of tools, a
 reasoning budget. Four ship in the box; building one for a new purpose means
 adding a profile.
 
-**Stack:** Next.js 16 (App Router) · Vercel AI SDK v7 · Claude (`claude-opus-5`)
+**Stack:** Next.js 16 (App Router) · Vercel AI SDK v7 · Claude (`claude-opus-5` by default)
 · Drizzle ORM + Postgres · Langfuse via OpenTelemetry · TypeScript
 
 ---
@@ -50,13 +50,12 @@ through a different one would leave calls the new agent cannot resolve.
 Add a profile to `src/agents/profiles.ts` and register it:
 
 ```ts
-export const supportAgent: AgentProfile = {
+export const supportAgent: AgentProfileInput = {
   id: "support",
   name: "Support agent",
   description: "Answers customer questions from the help centre and order data.",
   systemPrompt: "You are a support agent. Look up the order before…",
   tools: ["search_help_centre", "lookup_order", "current_time"],
-  model: "claude-opus-5",
   maxSteps: 10,
   effort: "medium",
   thinking: true,
@@ -66,6 +65,21 @@ export const supportAgent: AgentProfile = {
 That is the whole change. No route, service or component touches this — the
 loop reads the profile. New tools go in `src/tools/` and get one line in
 `src/tools/registry.ts`.
+
+No profile names a model. They all follow `ANTHROPIC_MODEL`, so a new model
+rolls out everywhere by changing one environment variable — or a cheaper one
+runs in staging while production stays on Opus. A profile that should ignore
+that and stay on a specific model sets `model` explicitly:
+
+```ts
+export const triageAgent: AgentProfileInput = {
+  // …
+  model: "claude-haiku-4-5", // pinned: cheap classification, never follows the env
+};
+```
+
+The model is resolved once, when profiles load, so the routes, the run metrics
+and the model cache all read the same value.
 
 Profiles are validated at startup, so mistakes are a boot failure with a
 readable message rather than a strange model response in production. The
@@ -229,7 +243,9 @@ which does not support the TypeScript 7 compiler yet.
 
 Deploys to Vercel as-is. Set `ANTHROPIC_API_KEY`, `DATABASE_URL` and the
 Langfuse variables in the project's environment settings, and run
-`npm run db:migrate` against the production database.
+`npm run db:migrate` against the production database. `ANTHROPIC_MODEL` is
+optional — set it per environment to run a different model without a
+redeploy of code.
 
 The chat route sets `maxDuration = 300`: research runs at 20 steps genuinely
 take minutes. Check your plan allows it, and lower it if not.

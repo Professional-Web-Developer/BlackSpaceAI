@@ -1,4 +1,4 @@
-import type { AgentProfile } from "./types";
+import type { AgentProfileInput } from "./types";
 
 /**
  * The built-in agents. Each one is a different purpose expressed as a prompt
@@ -8,7 +8,7 @@ import type { AgentProfile } from "./types";
 const CITATION_RULE =
   "Cite your sources. When a claim comes from a search result or a fetched page, name the page and link it. When the tools do not cover something, say so instead of guessing.";
 
-export const generalAgent: AgentProfile = {
+export const generalAgent: AgentProfileInput = {
   id: "general",
   name: "General assistant",
   description:
@@ -24,13 +24,12 @@ export const generalAgent: AgentProfile = {
     "- Answer at the length the question deserves. A simple question gets a short answer.",
   ].join("\n"),
   tools: ["web_search", "web_fetch", "calculate", "current_time"],
-  model: "claude-opus-5",
   maxSteps: 12,
   effort: "high",
   thinking: true,
 };
 
-export const researchAgent: AgentProfile = {
+export const researchAgent: AgentProfileInput = {
   id: "research",
   name: "Researcher",
   description:
@@ -46,13 +45,12 @@ export const researchAgent: AgentProfile = {
     "- Finish with a short, direct answer to the question that was actually asked.",
   ].join("\n"),
   tools: ["web_search", "web_fetch", "current_time"],
-  model: "claude-opus-5",
   maxSteps: 20,
   effort: "xhigh",
   thinking: true,
 };
 
-export const analystAgent: AgentProfile = {
+export const analystAgent: AgentProfileInput = {
   id: "analyst",
   name: "Data analyst",
   description:
@@ -70,13 +68,12 @@ export const analystAgent: AgentProfile = {
   // code in Anthropic's sandbox themselves, and pairing them with an explicit
   // code execution tool gives the model two environments to confuse.
   tools: ["code_execution", "calculate", "current_time"],
-  model: "claude-opus-5",
   maxSteps: 16,
   effort: "high",
   thinking: true,
 };
 
-export const localAgent: AgentProfile = {
+export const localAgent: AgentProfileInput = {
   id: "local",
   name: "Local only",
   description:
@@ -90,13 +87,17 @@ export const localAgent: AgentProfile = {
     "- If the knowledge base does not cover something, say so plainly. Do not fill the gap from memory and do not claim you looked it up.",
   ].join("\n"),
   tools: ["search_knowledge_base", "calculate", "current_time"],
-  model: "claude-opus-5",
   maxSteps: 8,
   effort: "medium",
   thinking: true,
 };
 
-export const builtInAgents: AgentProfile[] = [
+/**
+ * None of these pin a model, so all four follow `ANTHROPIC_MODEL`. Add
+ * `model: "claude-haiku-4-5"` to a profile to hold it on one model whatever
+ * the environment says.
+ */
+export const builtInAgents: AgentProfileInput[] = [
   generalAgent,
   researchAgent,
   analystAgent,

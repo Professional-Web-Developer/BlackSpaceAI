@@ -1,0 +1,44 @@
+{
+  "name": "blackspaceai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:verify": "tsx scripts/verify-db.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.39",
+    "@ai-sdk/react": "^4.0.71",
+    "@langfuse/otel": "^5.10.1",
+    "@langfuse/tracing": "^5.10.1",
+    "@langfuse/vercel-ai-sdk": "^5.10.1",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/sdk-node": "^0.221.0",
+    "ai": "^7.0.68",
+    "drizzle-orm": "^0.45.2",
+    "next": "^16.3.1",
+    "postgres": "^3.4.9",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.1",
+    "tsx": "^4.23.12",
+    "typescript": "^6.0.3"
+  }
+}

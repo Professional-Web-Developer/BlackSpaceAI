@@ -43,12 +43,22 @@ const envSchema = z.object({
   /**
    * Embeddings for retrieval. Anthropic does not provide an embedding model,
    * so this is the one pluggable provider. Retrieval is disabled entirely when
-   * the chosen provider has no key, and the rest of the app is unaffected.
+   * no provider has a key, and the rest of the app is unaffected.
+   *
+   * Leave EMBEDDING_PROVIDER unset to pick whichever provider has a key -
+   * setting one key is then the whole configuration. Set it explicitly to
+   * decide when more than one key is present.
+   *
+   * EMBEDDING_MODEL likewise defaults per provider, because a model name is
+   * only valid for its own provider: carrying voyage-3.5 over to Google would
+   * fail on every call.
    */
-  EMBEDDING_PROVIDER: z.enum(["voyage", "openai"]).default("voyage"),
-  EMBEDDING_MODEL: z.string().min(1).default("voyage-3.5"),
+  EMBEDDING_PROVIDER: z.enum(["voyage", "openai", "google"]).optional(),
+  EMBEDDING_MODEL: z.string().min(1).optional(),
   VOYAGE_API_KEY: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
+  /** Google AI Studio key; its free tier is the no-cost way to run retrieval. */
+  GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1).optional(),
   /**
    * Overrides the embedding provider's endpoint. Needed for a gateway, a
    * self-hosted or Azure-style deployment, or a regional endpoint.

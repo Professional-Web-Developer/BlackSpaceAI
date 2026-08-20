@@ -303,11 +303,20 @@ DELETE /api/documents/:id
   is what makes naive RAG return half-sentences.
 - **Embedding** happens before the write transaction opens, so a slow network
   call never holds a database connection.
-- **Voyage** is the default provider (`voyage-3.5`, natively 1024-wide) because
-  it is Anthropic's recommended pairing; OpenAI's `text-embedding-3-*` models
-  can emit 1024 too, so either fits the same column. Queries and stored
-  passages are embedded with different input types, which measurably improves
-  retrieval on Voyage.
+- **Three providers, one column.** Voyage (`voyage-3.5`) is Anthropic's
+  recommended pairing, Google (`gemini-embedding-001`) has a free tier, and
+  OpenAI is there because many projects already have a key. All three can emit
+  1024-wide vectors, so switching between them needs **no migration and no
+  re-embedding** — only re-embedding if you want the vectors to actually come
+  from the new model.
+- **Configuration is one key.** Leave `EMBEDDING_PROVIDER` and
+  `EMBEDDING_MODEL` unset and the provider is detected from whichever key is
+  present, each with its own default model. Set them explicitly when more than
+  one key exists; detection order is Voyage, Google, OpenAI.
+- **Queries and passages are embedded differently** where the provider supports
+  it — `inputType` on Voyage, `taskType` (`RETRIEVAL_QUERY` /
+  `RETRIEVAL_DOCUMENT`) on Google. Using the wrong side measurably degrades
+  retrieval. OpenAI has no such distinction and takes only the width.
 - **The vector column has a fixed width**, so `EMBEDDING_DIMENSIONS` is a
   constant rather than an environment variable — a value read from the
   environment would silently change what `drizzle-kit generate` produces.
@@ -483,7 +492,7 @@ Everything else is optional and the app says so at the top of the page:
 
 | To try | Add |
 | --- | --- |
-| Retrieval / RAG | `VOYAGE_API_KEY` (or switch `EMBEDDING_PROVIDER=openai`), then `npm run rag:ingest -- ./some-file.md` |
+| Retrieval / RAG | `GOOGLE_GENERATIVE_AI_API_KEY` (free tier), `VOYAGE_API_KEY` or `OPENAI_API_KEY`, then `npm run rag:ingest -- ./some-file.md` |
 | File attachments | `AWS_REGION` + `S3_BUCKET` (or an S3-compatible `S3_ENDPOINT`) |
 | Traces | `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` |
 | Skills on the analyst | `npm run skills:upload` |

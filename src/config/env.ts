@@ -31,8 +31,11 @@ const envSchema = z.object({
     .transform((value) => value === "true"),
 
   /**
-   * Postgres connection string. When absent the app falls back to the
-   * in-memory repository so a fresh clone runs without any infrastructure.
+   * Postgres connection string. Required in practice: the in-memory
+   * repository below only covers conversations, while accounts and sessions
+   * read the database directly, so sign-in fails without this. It stays
+   * optional in the schema so tooling that never authenticates - the
+   * repository verification script, for one - still runs.
    */
   DATABASE_URL: z.string().url().optional(),
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),

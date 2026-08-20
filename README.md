@@ -445,6 +445,60 @@ src/
 4. `onFinish` persists the assistant message — tool calls and outputs
    included — records run metrics, and flushes traces.
 
+## Running it locally
+
+You need Node 20+, Docker (for Postgres), and an Anthropic API key.
+
+```bash
+npm install
+cp .env.example .env.local          # then edit it, see below
+docker compose up -d                # Postgres 16 with pgvector on :5432
+npm run db:migrate                  # creates tables, enables pgvector
+npm run dev                         # http://localhost:3000
+```
+
+The three lines that matter in `.env.local`:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/blackspace
+ADMIN_EMAILS=you@example.com        # this address gets the admin role
+```
+
+Then open http://localhost:3000, choose **Create account**, and register with
+the address you put in `ADMIN_EMAILS`. Passwords need 12+ characters.
+
+Everything else is optional and the app says so at the top of the page:
+`5 agents · Postgres storage · tracing off · attachments off`.
+
+### What works with just those three
+
+- All five agents, and switching between them mid-thread
+- Web search, web fetch and code execution (Anthropic-hosted, no extra keys)
+- Conversation history, persisted and private per user
+- The cost meter in the header, and `GET /api/usage`
+- The offline agent's keyword search over the built-in notes
+
+### What needs one more thing
+
+| To try | Add |
+| --- | --- |
+| Retrieval / RAG | `VOYAGE_API_KEY` (or switch `EMBEDDING_PROVIDER=openai`), then `npm run rag:ingest -- ./some-file.md` |
+| File attachments | `AWS_REGION` + `S3_BUCKET` (or an S3-compatible `S3_ENDPOINT`) |
+| Traces | `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` |
+| Skills on the analyst | `npm run skills:upload` |
+
+### Checking it without the browser
+
+```bash
+npm run db:verify    # round-trips the repository, including user isolation
+npm run typecheck
+npm run lint
+```
+
+If sign-in fails with *"DATABASE_URL is not set"*, the database is not up or
+the URL is wrong — accounts and sessions read Postgres directly.
+
 ## Getting started
 
 ```bash
@@ -454,7 +508,9 @@ npm run dev
 ```
 
 Only `ANTHROPIC_API_KEY` is required. Without `DATABASE_URL` the app uses an
-in-memory store, so a fresh clone runs with no infrastructure at all.
+in-memory store for conversations - but accounts and sessions read Postgres
+directly, so **a database is required to sign in**. In practice that means
+`docker compose up -d` before the first run.
 
 To persist conversations:
 

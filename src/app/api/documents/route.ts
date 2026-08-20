@@ -16,7 +16,7 @@ function assertRagAvailable(): void {
   }
   if (!isRagEnabled()) {
     throw new ConfigurationError(
-      "Retrieval needs an embedding provider. Set VOYAGE_API_KEY (or switch EMBEDDING_PROVIDER to openai and set OPENAI_API_KEY).",
+      "Retrieval needs an embedding provider. Set GOOGLE_GENERATIVE_AI_API_KEY (free tier), VOYAGE_API_KEY, or OPENAI_API_KEY.",
     );
   }
 }

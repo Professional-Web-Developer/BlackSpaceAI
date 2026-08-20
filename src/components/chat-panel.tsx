@@ -11,9 +11,7 @@ import { useRef, useState } from "react";
 
 import type { AgentSummary } from "@/agents/types";
 
-/** Keeps attachments well under the request body limit; they are stored too. */
-const MAX_FILES = 4;
-const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
+import { useAttachments } from "./use-attachments";
 
 const SUGGESTIONS: Record<string, string[]> = {
   general: [
@@ -40,6 +38,10 @@ type ChatPanelProps = {
   agent: AgentSummary | undefined;
   initialMessages: UIMessage[];
   onTurnComplete: () => void;
+  /** Server-side upload ceiling, so the UI rejects before the round trip. */
+  maxUploadMb: number;
+  /** False when no bucket is configured; the attach control is then hidden. */
+  uploadsEnabled: boolean;
 };
 
 export function ChatPanel({
@@ -48,11 +50,12 @@ export function ChatPanel({
   agent,
   initialMessages,
   onTurnComplete,
+  maxUploadMb,
+  uploadsEnabled,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
-  const [files, setFiles] = useState<FileList | undefined>();
-  const [attachmentError, setAttachmentError] = useState<string>();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const files = useAttachments(maxUploadMb);
 
   const { messages, sendMessage, status, stop, error } = useChat({
     id: conversationId,
@@ -74,36 +77,25 @@ export function ChatPanel({
 
   const isBusy = status === "submitted" || status === "streaming";
 
-  function clearAttachments() {
-    setFiles(undefined);
-    setAttachmentError(undefined);
+  async function selectFiles(selected: FileList | null) {
+    if (!selected || selected.length === 0) return;
+    // Uploaded immediately rather than on send, so a large file transfers
+    // while the message is still being typed.
+    await files.upload(selected);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-
-  function selectFiles(selected: FileList | null) {
-    if (!selected || selected.length === 0) return clearAttachments();
-
-    const total = [...selected].reduce((sum, file) => sum + file.size, 0);
-    if (selected.length > MAX_FILES) {
-      setAttachmentError(`At most ${MAX_FILES} files.`);
-      return;
-    }
-    if (total > MAX_TOTAL_BYTES) {
-      setAttachmentError("Attachments must total under 8 MB.");
-      return;
-    }
-
-    setAttachmentError(undefined);
-    setFiles(selected);
   }
 
   function submit(text: string) {
     const trimmed = text.trim();
-    if ((!trimmed && !files) || isBusy || attachmentError) return;
+    const parts = files.toFileParts();
+
+    if ((!trimmed && parts.length === 0) || isBusy || files.uploading) return;
 
     setInput("");
-    void sendMessage(files ? { text: trimmed, files } : { text: trimmed });
-    clearAttachments();
+    void sendMessage(
+      parts.length > 0 ? { text: trimmed, files: parts } : { text: trimmed },
+    );
+    files.reset();
   }
 
   const suggestions = SUGGESTIONS[agentId] ?? [];
@@ -149,10 +141,18 @@ export function ChatPanel({
               }
 
               if (part.type === "file") {
+                // The href is the durable reference; the route authorises the
+                // request and redirects to a freshly signed URL.
                 return (
-                  <div key={key} className="attachment">
+                  <a
+                    key={key}
+                    className="attachment"
+                    href={part.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
                     {part.filename ?? part.mediaType}
-                  </div>
+                  </a>
                 );
               }
 
@@ -204,17 +204,20 @@ export function ChatPanel({
           submit(input);
         }}
       >
-        <label className="attach" title="Attach images or PDFs">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,application/pdf,text/plain"
-            onChange={(event) => selectFiles(event.target.files)}
-          />
-          <span aria-hidden="true">＋</span>
-          <span className="visually-hidden">Attach files</span>
-        </label>
+        {uploadsEnabled && (
+          <label className="attach" title={`Attach images or PDFs (max ${maxUploadMb} MB)`}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv"
+              disabled={files.uploading}
+              onChange={(event) => void selectFiles(event.target.files)}
+            />
+            <span aria-hidden="true">{files.uploading ? "…" : "＋"}</span>
+            <span className="visually-hidden">Attach files</span>
+          </label>
+        )}
 
         <input
           value={input}
@@ -231,7 +234,8 @@ export function ChatPanel({
           <button
             type="submit"
             disabled={
-              (input.trim().length === 0 && !files) || Boolean(attachmentError)
+              (input.trim().length === 0 && files.attachments.length === 0) ||
+              files.uploading
             }
           >
             Send
@@ -239,11 +243,23 @@ export function ChatPanel({
         )}
       </form>
 
-      {(files || attachmentError) && (
-        <p className={attachmentError ? "error attachments" : "attachments"}>
-          {attachmentError ??
-            `${files?.length} file(s) attached`}
-        </p>
+      {files.error && <p className="error attachments">{files.error}</p>}
+
+      {files.attachments.length > 0 && (
+        <ul className="pending-attachments">
+          {files.attachments.map((attachment) => (
+            <li key={attachment.id}>
+              {attachment.filename}
+              <button
+                type="button"
+                aria-label={`Remove ${attachment.filename}`}
+                onClick={() => files.remove(attachment.id)}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </>
   );

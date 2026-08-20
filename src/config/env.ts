@@ -79,6 +79,21 @@ const envSchema = z.object({
         .filter(Boolean),
     ),
 
+  /**
+   * Attachment storage. Without a bucket the app falls back to sending small
+   * files inline, so this is optional - but inline attachments are stored in
+   * the message row, which is why the inline limits are low.
+   */
+  AWS_REGION: z.string().min(1).optional(),
+  S3_BUCKET: z.string().min(1).optional(),
+  /** Omit both to use the SDK's default credential chain (IAM role, profile). */
+  AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  /** For S3-compatible stores: Cloudflare R2, MinIO, or a local test server. */
+  S3_ENDPOINT: z.string().url().optional(),
+  /** Per-file ceiling for direct uploads, in megabytes. */
+  MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(500).default(25),
+
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
   LANGFUSE_BASE_URL: z.string().url().default("https://cloud.langfuse.com"),

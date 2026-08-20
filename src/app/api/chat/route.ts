@@ -13,6 +13,7 @@ import { ConfigurationError, toErrorResponse } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { flushTraces } from "@/lib/observability";
 import { chatRequestSchema } from "@/lib/validation";
+import { resolveAttachmentUrls } from "@/storage/resolve-attachments";
 import { resolveTools } from "@/tools/registry";
 import { completeTurn, prepareTurn } from "@/services/chat-service";
 
@@ -48,7 +49,11 @@ export async function POST(request: Request) {
     });
 
     const { agent } = turn;
-    const modelMessages = await convertToModelMessages(turn.messages);
+
+    // Attachments are stored as durable internal references; the model needs
+    // fetchable URLs, so they are signed for the length of this turn only.
+    const withAttachments = await resolveAttachmentUrls(turn.messages, user.id);
+    const modelMessages = await convertToModelMessages(withAttachments);
     const startedAt = Date.now();
 
     // Everything inside this callback is grouped into one Langfuse trace and

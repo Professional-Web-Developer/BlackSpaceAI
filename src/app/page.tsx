@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { listAgentSummaries } from "@/agents/registry";
 import { getCurrentUser } from "@/auth/service";
 import { Chat } from "@/components/chat";
-import { isDatabaseEnabled, isTracingEnabled } from "@/config/env";
+import { env, isDatabaseEnabled, isTracingEnabled } from "@/config/env";
+import { isStorageConfigured } from "@/storage/s3";
 import { listConversations } from "@/services/chat-service";
 
 // The page reads the session and stored conversations, so it cannot be
@@ -31,10 +32,16 @@ export default async function Home() {
         <p>
           {agents.length} agents &middot;{" "}
           {isDatabaseEnabled ? "Postgres" : "in-memory"} storage &middot;{" "}
-          {isTracingEnabled ? "Langfuse tracing on" : "tracing off"}
+          {isTracingEnabled ? "Langfuse tracing on" : "tracing off"} &middot;{" "}
+          {isStorageConfigured ? "S3 attachments" : "attachments off"}
         </p>
       </header>
-      <Chat initialConversations={conversations} agents={agents} />
+      <Chat
+        initialConversations={conversations}
+        agents={agents}
+        maxUploadMb={env.MAX_UPLOAD_MB}
+        uploadsEnabled={isStorageConfigured}
+      />
     </main>
   );
 }

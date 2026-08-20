@@ -58,3 +58,26 @@ export const credentialsSchema = z.object({
     .min(12, "Use at least 12 characters")
     .max(200, "Passwords must be under 200 characters"),
 });
+
+/**
+ * Types Claude can actually read. Anything else would upload successfully and
+ * then fail at the model, so it is rejected at the presign step instead.
+ */
+export const ALLOWED_UPLOAD_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+] as const;
+
+export const presignUploadSchema = z.object({
+  filename: z.string().min(1).max(255),
+  contentType: z.enum(ALLOWED_UPLOAD_TYPES),
+  sizeBytes: z.number().int().positive(),
+});
+
+export const attachmentIdSchema = z.uuid("Invalid attachment id");

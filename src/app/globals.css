@@ -509,3 +509,38 @@ body {
   font-size: 0.75rem;
   color: var(--muted);
 }
+
+.pending-attachments {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+
+.pending-attachments li {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.pending-attachments button {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+a.attachment {
+  text-decoration: none;
+  color: var(--accent);
+}

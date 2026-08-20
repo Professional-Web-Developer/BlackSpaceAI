@@ -7,7 +7,9 @@
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    await import("./instrumentation.node");
+    const { startupChecks } = await import("./instrumentation.node");
+    // Rejects when a configured model does not exist, which fails startup.
+    await startupChecks;
   }
 }
 

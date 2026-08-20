@@ -18,6 +18,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.39",
     "@ai-sdk/react": "^4.0.71",
+    "@anthropic-ai/sdk": "^0.120.0",
     "@langfuse/otel": "^5.10.1",
     "@langfuse/tracing": "^5.10.1",
     "@langfuse/vercel-ai-sdk": "^5.10.1",

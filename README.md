@@ -81,6 +81,35 @@ export const triageAgent: AgentProfileInput = {
 The model is resolved once, when profiles load, so the routes, the run metrics
 and the model cache all read the same value.
 
+### Model ids are checked on startup
+
+Because the model is a free-form string, a typo would otherwise surface as a
+failed API call on someone's first message. On boot the app asks the Anthropic
+Models API whether each configured model exists:
+
+```
+[info] Model verified {"model":"claude-opus-5","displayName":"Claude Opus 5","contextWindow":1000000}
+```
+
+A **404 is the only fatal answer** — it is the one response that definitively
+means the id is wrong. The server then fails to start:
+
+```
+Unknown model id(s): claude-opuss-5. Check ANTHROPIC_MODEL and any model
+pinned on an agent profile against the models your account can use.
+```
+
+Everything else — a rate limit, an outage, no network, a rejected key — says
+nothing about whether the id is valid, so those log a warning and start
+normally. Refusing to boot on them would turn an Anthropic blip into an outage
+here too, and a genuinely broken key still surfaces on the first chat request.
+
+The check is skipped automatically during `next build` and when no API key is
+set, and can be turned off with `SKIP_MODEL_VALIDATION=true` for offline work
+or CI. It uses the official `@anthropic-ai/sdk`, which reads `ANTHROPIC_BASE_URL`
+just as the chat provider does, so a proxied deployment checks against the same
+endpoint it will later call.
+
 Profiles are validated at startup, so mistakes are a boot failure with a
 readable message rather than a strange model response in production. The
 checks: every tool name exists, no duplicates, no empty tool set, a sane step

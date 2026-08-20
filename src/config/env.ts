@@ -20,6 +20,17 @@ const envSchema = z.object({
   ANTHROPIC_MODEL: z.string().min(1).default("claude-opus-5"),
 
   /**
+   * Set to "true" to skip the startup check that configured models exist.
+   * Useful offline, and in CI where no API key is available.
+   */
+  SKIP_MODEL_VALIDATION: z
+    .string()
+    .optional()
+    // Explicit rather than `z.coerce.boolean()`, which treats the string
+    // "false" as true because it is non-empty.
+    .transform((value) => value === "true"),
+
+  /**
    * Postgres connection string. When absent the app falls back to the
    * in-memory repository so a fresh clone runs without any infrastructure.
    */

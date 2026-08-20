@@ -13,6 +13,13 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
 
   /**
+   * Model every agent uses unless its profile pins one explicitly. Kept as a
+   * plain string rather than an enum so a newly released model can be rolled
+   * out by changing an environment variable, with no code change.
+   */
+  ANTHROPIC_MODEL: z.string().min(1).default("claude-opus-5"),
+
+  /**
    * Postgres connection string. When absent the app falls back to the
    * in-memory repository so a fresh clone runs without any infrastructure.
    */

@@ -1,5 +1,7 @@
 import { env } from "@/config/env";
 import { NotFoundError } from "@/lib/errors";
+import { logger } from "@/lib/logger";
+import { supportsCompaction } from "@/lib/model-features";
 import {
   INCOMPATIBLE_TOOL_PAIRS,
   NETWORK_TOOL_NAMES,
@@ -78,6 +80,16 @@ function buildRegistry(
     if (registry.has(profile.id)) {
       throw new Error(`Duplicate agent id "${profile.id}".`);
     }
+
+    // A warning, not a failure: losing compaction costs efficiency on long
+    // threads, whereas refusing to boot would make a model change an outage.
+    if (profile.compaction && !supportsCompaction(profile.model)) {
+      logger.warn(
+        "Model does not support compaction - the agent will run without it",
+        { agent: profile.id, model: profile.model },
+      );
+    }
+
     registry.set(profile.id, profile);
   }
 

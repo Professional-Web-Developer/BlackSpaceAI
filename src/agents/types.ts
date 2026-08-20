@@ -44,6 +44,30 @@ export type AgentProfileInput = {
    * Turn it off only for simple, latency-sensitive agents.
    */
   thinking: boolean;
+  /**
+   * Prompt caching. On by default, and worth leaving on: an agent loop
+   * re-sends its whole history every step, so from the second step onwards
+   * most input tokens are cache reads at about a tenth of the price.
+   *
+   * Anthropic will not cache a prefix below roughly 1024 tokens, so a very
+   * small agent simply gets no benefit rather than an error.
+   */
+  caching?: boolean;
+  /**
+   * Server-side compaction for conversations that outgrow the context window.
+   * Present means enabled. Anthropic summarises the earlier turns and returns
+   * a compaction block that is stored with the thread and sent back on later
+   * turns in place of what it replaced.
+   *
+   * Only worth it on agents whose threads get long; it costs a summarisation
+   * pass when it triggers.
+   */
+  compaction?: {
+    /** Input-token threshold that triggers compaction. */
+    triggerTokens?: number;
+    /** Steer what the summary keeps. */
+    instructions?: string;
+  };
 };
 
 /**

@@ -176,6 +176,64 @@ against password guessing rather than a defence — a serverless deployment runs
 many instances, each with its own counter. Put a shared limiter in front of
 anything public.
 
+## Prompt caching and compaction
+
+Two settings on a profile, both about what a long agent run costs.
+
+### Caching (on by default)
+
+```ts
+caching: true,   // omit it; this is the default
+```
+
+An agent re-sends its whole history on every step, so from the second step
+onwards most input tokens are a repeat of the previous request. Caching means
+they are billed at roughly a tenth of the input rate instead of the full one.
+This uses Anthropic's top-level auto-caching, which caches the last cacheable
+block — each step reads the prefix the previous step wrote.
+
+Anthropic will not cache a prefix below roughly 1024 tokens, so a very small
+agent simply gets no benefit rather than an error.
+
+**Check that it is working.** `GET /api/usage` reports `cachedShare` — the
+proportion of input tokens served from cache this month:
+
+```json
+{ "inputTokens": 120000, "cachedInputTokens": 102000, "cachedShare": 0.85 }
+```
+
+A share near zero across many runs is the signal that something is
+invalidating the prefix on every request — and that caching is then costing
+money rather than saving it, since writes carry a 1.25x premium with none of
+the read discount. The usual causes are a timestamp or a per-request id early
+in the prompt, or a tool list whose order is not stable.
+
+### Compaction (opt in, per agent)
+
+```ts
+compaction: {
+  triggerTokens: 120_000,
+  instructions: "Preserve every source URL seen so far and what each contributed.",
+},
+```
+
+When a conversation approaches the context window, Anthropic summarises the
+earlier turns server-side and returns a compaction block. That block is stored
+with the thread and sent back on later turns in place of what it replaced —
+`instructions` steer what the summary keeps, which matters because the default
+summary does not know that, say, source URLs are the valuable part.
+
+Enabled on the general, research and analyst agents; the knowledge-base and
+offline agents have short turns and do not need it.
+
+**It is gated on the model.** `compact_20260112` is a 400 on models that do not
+support it, and the model is configurable, so a profile requesting compaction
+on an unsupported model logs a warning at startup and runs without it. That is
+a warning rather than a boot failure deliberately: losing compaction costs
+efficiency, whereas refusing to start would turn a model change into an outage.
+The supported set is in `src/lib/model-features.ts` — update it when you adopt
+a newer model.
+
 ## Cost tracking and monthly limits
 
 Every turn is priced when it finishes and stored with the run, so a past turn

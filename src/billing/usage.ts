@@ -29,6 +29,14 @@ export type UsageSummary = {
   fraction: number;
   runs: number;
   byAgent: { agentId: string; runs: number; spentNanos: number }[];
+  /**
+   * Cache effectiveness. A cached share near zero across many runs means
+   * something is invalidating the prefix on every request, and caching is
+   * costing rather than saving - the write premium with none of the discount.
+   */
+  inputTokens: number;
+  cachedInputTokens: number;
+  cachedShare: number;
 };
 
 export class BudgetExceededError extends AppError {
@@ -88,7 +96,7 @@ export async function spendForUser(
 export async function usageForUser(userId: string): Promise<UsageSummary> {
   const periodStart = currentPeriodStart();
 
-  const [{ spentNanos, runs }, limitNanos, byAgent] = await Promise.all([
+  const [{ spentNanos, runs }, limitNanos, byAgent, tokens] = await Promise.all([
     spendForUser(userId, periodStart),
     limitForUser(userId),
     getDatabase()
@@ -110,7 +118,27 @@ export async function usageForUser(userId: string): Promise<UsageSummary> {
       )
       .groupBy(schema.agentRuns.agentId)
       .orderBy(desc(sum(schema.agentRuns.costNanos))),
+
+    getDatabase()
+      .select({
+        inputTokens: sum(schema.agentRuns.inputTokens),
+        cachedInputTokens: sum(schema.agentRuns.cacheReadTokens),
+      })
+      .from(schema.agentRuns)
+      .innerJoin(
+        schema.conversations,
+        eq(schema.conversations.id, schema.agentRuns.conversationId),
+      )
+      .where(
+        and(
+          eq(schema.conversations.userId, userId),
+          gte(schema.agentRuns.createdAt, periodStart),
+        ),
+      ),
   ]);
+
+  const inputTokens = Number(tokens[0]?.inputTokens ?? 0);
+  const cachedInputTokens = Number(tokens[0]?.cachedInputTokens ?? 0);
 
   return {
     periodStart: periodStart.toISOString(),
@@ -125,6 +153,9 @@ export async function usageForUser(userId: string): Promise<UsageSummary> {
       runs: row.runs,
       spentNanos: Number(row.spentNanos ?? 0),
     })),
+    inputTokens,
+    cachedInputTokens,
+    cachedShare: inputTokens > 0 ? cachedInputTokens / inputTokens : 0,
   };
 }
 
